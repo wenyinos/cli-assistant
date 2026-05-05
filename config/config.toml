@@ -44,7 +44,7 @@ timeout = 60
 # ── Database (SQLite) ────────────────────────────────────────────────────────
 [database]
 # Path to the SQLite database file.
-path = "~/.local/share/cli-assistant/cla.db"
+path = "/var/lib/cli-assistant/cla.db"
 
 # ── History ───────────────────────────────────────────────────────────────────
 [history]

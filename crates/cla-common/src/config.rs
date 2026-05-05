@@ -122,9 +122,8 @@ pub struct DatabaseSchema {
 
 impl Default for DatabaseSchema {
     fn default() -> Self {
-        let data_dir = crate::environment::get_xdg_data_path();
         Self {
-            path: data_dir.join("cla.db"),
+            path: PathBuf::from("/var/lib/cli-assistant/cla.db"),
         }
     }
 }
@@ -318,6 +317,6 @@ enabled = false
     #[test]
     fn database_schema_defaults() {
         let db = DatabaseSchema::default();
-        assert!(db.path.ends_with("cla.db"));
+        assert_eq!(db.path, PathBuf::from("/var/lib/cli-assistant/cla.db"));
     }
 }
