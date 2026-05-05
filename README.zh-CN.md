@@ -24,7 +24,7 @@
 
 ```bash
 # 下载（将 VERSION 替换为实际版本号，如 v0.6.0）
-curl -LO https://github.com/rhel-lightspeed/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
+curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
 # 解压
 tar xzf cli-assistant-x86_64-linux-gnu.tar.gz

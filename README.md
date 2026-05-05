@@ -24,7 +24,7 @@ Download the latest tarball from [Releases](../../releases), then run the instal
 
 ```bash
 # Download (replace VERSION with actual version, e.g. v0.6.0)
-curl -LO https://github.com/rhel-lightspeed/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
+curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
 # Extract
 tar xzf cli-assistant-x86_64-linux-gnu.tar.gz
