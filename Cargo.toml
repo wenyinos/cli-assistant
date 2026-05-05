@@ -1,0 +1,66 @@
+[workspace]
+members = [
+    "crates/cla-common",
+    "crates/cla-client",
+    "crates/cla-daemon",
+    "crates/cla-dbus",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.5.1"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/rhel-lightspeed/command-line-assistant"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# HTTP
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "uuid", "chrono"] }
+
+# D-Bus
+zbus = { version = "4", default-features = false, features = ["tokio"] }
+
+# UUID
+uuid = { version = "1", features = ["v4", "v5"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Terminal / Rendering
+crossterm = "0.28"
+termimad = "0.30"
+
+# Markdown
+pulldown-cmark = "0.12"
+
+# File locking
+fs2 = "0.4"
+
+# MIME
+mime_guess = "2"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Misc
+dirs = "5"
+nix = { version = "0.29", features = ["term", "fs", "process", "poll"] }

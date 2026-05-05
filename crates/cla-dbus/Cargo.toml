@@ -1,0 +1,17 @@
+[package]
+name = "cla-dbus"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cla-common = { path = "../cla-common" }
+zbus = { workspace = true }
+zvariant = { version = "4" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }

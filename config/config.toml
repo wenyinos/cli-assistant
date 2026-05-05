@@ -1,0 +1,61 @@
+# cli-assistant configuration file
+#
+# Default location: /etc/cli-assistant/config.toml
+# All fields are optional — omitted values use the defaults shown below.
+
+# ── Backend (OpenAI-compatible API) ──────────────────────────────────────────
+[backend]
+# Base URL of the OpenAI-compatible API. The daemon appends /v1/chat/completions.
+endpoint = "https://api.openai.com"
+
+# Model name sent in the request body.
+model = "gpt-4"
+
+# API key for Bearer authentication.
+# Can also be set via the CL_API_KEY environment variable (env takes precedence).
+api_key = ""
+
+# System prompt prepended to every conversation.
+prompt = "You are a helpful assistant for Linux system administration."
+
+# Maximum tokens in the assistant's response.
+max_tokens = 4096
+
+# Sampling temperature (0.0–2.0). Higher values produce more random output.
+temperature = 0.7
+
+# Default response language. Leave empty to let the model decide.
+# Examples: "zh-CN" (简体中文), "zh-TW" (繁體中文), "en" (English), "ja" (日本語)
+language = ""
+
+# HTTP request timeout in seconds.
+timeout = 60
+
+# Optional proxy settings (protocol → URL).
+# [backend.proxies]
+# https = "http://proxy.example.com:8080"
+# http  = "http://proxy.example.com:8080"
+
+# Optional mTLS certificate paths (only needed for RHEL Lightspeed backend).
+# [backend.auth]
+# cert_file = "/etc/pki/consumer/cert.pem"
+# key_file  = "/etc/pki/consumer/key.pem"
+
+# ── Database (SQLite) ────────────────────────────────────────────────────────
+[database]
+# Path to the SQLite database file.
+path = "~/.local/share/cli-assistant/cla.db"
+
+# ── History ───────────────────────────────────────────────────────────────────
+[history]
+# Enable or disable conversation history recording.
+enabled = true
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+[logging]
+# Log level: TRACE, DEBUG, INFO, WARN, ERROR.
+level = "INFO"
+
+# Audit logging (writes structured JSON for journald consumption).
+# [logging.audit]
+# enabled = true

@@ -1,0 +1,29 @@
+[package]
+name = "cla-client"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "c"
+path = "src/main.rs"
+
+[dependencies]
+cla-common = { path = "../cla-common" }
+cla-dbus = { path = "../cla-dbus" }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+crossterm = { workspace = true }
+termimad = { workspace = true }
+pulldown-cmark = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+nix = { workspace = true }
+dirs = { workspace = true }
+zbus = { workspace = true }
+libc = "0.2"
