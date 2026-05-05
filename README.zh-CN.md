@@ -23,11 +23,14 @@
 从 [Releases](../../releases) 页面下载最新 tarball，然后运行安装脚本：
 
 ```bash
-# 下载（将 VERSION 替换为实际版本号，如 v0.6.0）
+# 下载 x86_64（将 VERSION 替换为实际版本号，如 v0.6.1）
 curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
+# 或下载 aarch64
+curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-aarch64-linux-gnu.tar.gz
+
 # 解压
-tar xzf cli-assistant-x86_64-linux-gnu.tar.gz
+tar xzf cli-assistant-*-linux-gnu.tar.gz
 cd cli-assistant
 
 # 安装（需要 root 权限）

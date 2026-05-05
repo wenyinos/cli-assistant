@@ -23,11 +23,14 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 Download the latest tarball from [Releases](../../releases), then run the install script:
 
 ```bash
-# Download (replace VERSION with actual version, e.g. v0.6.0)
+# Download x86_64 (replace VERSION with actual version, e.g. v0.6.1)
 curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
+# Or download aarch64
+curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-aarch64-linux-gnu.tar.gz
+
 # Extract
-tar xzf cli-assistant-x86_64-linux-gnu.tar.gz
+tar xzf cli-assistant-*-linux-gnu.tar.gz
 cd cli-assistant
 
 # Install (requires root)
