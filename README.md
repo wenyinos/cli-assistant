@@ -47,6 +47,9 @@ The install script will:
 # Edit config — set your API key and endpoint
 sudo vim /etc/cli-assistant/config.toml
 
+# Restart the daemon to apply changes
+sudo systemctl restart clad
+
 # Test
 c "How do I check disk space?"
 ```
@@ -76,6 +79,18 @@ For detailed build, test, and run instructions, see **[docs/BUILD.md](docs/BUILD
 
 ```bash
 sudo ./scripts/uninstall.sh
+```
+
+### Service Management
+
+```bash
+sudo systemctl status clad     # Check service status
+sudo systemctl restart clad    # Restart (required after config changes)
+sudo systemctl stop clad       # Stop the daemon
+sudo systemctl start clad      # Start the daemon
+sudo systemctl enable clad     # Enable on boot (done by install.sh)
+sudo systemctl disable clad    # Disable on boot
+journalctl -u clad -f          # View live logs
 ```
 
 ## Configuration

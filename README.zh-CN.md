@@ -47,6 +47,9 @@ sudo ./install.sh
 # 编辑配置 — 填入 API key 和端点地址
 sudo vim /etc/cli-assistant/config.toml
 
+# 重启守护进程使配置生效
+sudo systemctl restart clad
+
 # 测试
 c "如何检查磁盘空间？"
 ```
@@ -76,6 +79,18 @@ sudo ./target/release/clad &          # 启动守护进程
 
 ```bash
 sudo ./scripts/uninstall.sh
+```
+
+### 服务管理
+
+```bash
+sudo systemctl status clad     # 查看服务状态
+sudo systemctl restart clad    # 重启（修改配置后必须执行）
+sudo systemctl stop clad       # 停止守护进程
+sudo systemctl start clad      # 启动守护进程
+sudo systemctl enable clad     # 设为开机自启（install.sh 已自动执行）
+sudo systemctl disable clad    # 取消开机自启
+journalctl -u clad -f          # 查看实时日志
 ```
 
 ## 配置说明
