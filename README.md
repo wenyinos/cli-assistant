@@ -1,3 +1,5 @@
+[English](README.md) | [中文](README.zh-CN.md)
+
 # cli-assistant
 
 A fast, lightweight CLI assistant for Linux system administration — powered by any OpenAI-compatible API.
@@ -14,7 +16,39 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 - **Configurable language** — force replies in your preferred language
 - **D-Bus daemon architecture** — client/daemon separation for system-level integration
 
-## Quick Start
+## Installation
+
+### From Release (Recommended)
+
+Download the latest tarball from [Releases](../../releases), then run the install script:
+
+```bash
+# Download (replace VERSION with actual version, e.g. v0.6.0)
+curl -LO https://github.com/rhel-lightspeed/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
+
+# Extract
+tar xzf cli-assistant-x86_64-linux-gnu.tar.gz
+cd cli-assistant
+
+# Install (requires root)
+sudo ./install.sh
+```
+
+The install script will:
+- Copy binaries (`c`, `clad`) to `/usr/local/bin`
+- Install D-Bus policy to `/etc/dbus-1/system.d/`
+- Register `clad` as a systemd service
+- Write default config to `/etc/cli-assistant/config.toml`
+
+```bash
+# Edit config — set your API key and endpoint
+sudo vim /etc/cli-assistant/config.toml
+
+# Test
+c "How do I check disk space?"
+```
+
+### From Source
 
 ```bash
 # Build
@@ -34,6 +68,12 @@ sudo ./target/release/clad &          # start daemon
 ```
 
 For detailed build, test, and run instructions, see **[docs/BUILD.md](docs/BUILD.md)**.
+
+### Uninstall
+
+```bash
+sudo ./scripts/uninstall.sh
+```
 
 ## Configuration
 

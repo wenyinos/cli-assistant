@@ -1,3 +1,5 @@
+[English](README.md) | [中文](README.zh-CN.md)
+
 # cli-assistant
 
 一个快速、轻量的 Linux 系统管理命令行助手 — 支持任意 OpenAI 兼容 API。
@@ -14,7 +16,39 @@
 - **语言配置** — 可指定 AI 回复语言（如中文、英文、日文等）
 - **D-Bus 守护进程架构** — 客户端/服务端分离，支持系统级集成
 
-## 快速开始
+## 安装方式
+
+### 从 Release 安装（推荐）
+
+从 [Releases](../../releases) 页面下载最新 tarball，然后运行安装脚本：
+
+```bash
+# 下载（将 VERSION 替换为实际版本号，如 v0.6.0）
+curl -LO https://github.com/rhel-lightspeed/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
+
+# 解压
+tar xzf cli-assistant-x86_64-linux-gnu.tar.gz
+cd cli-assistant
+
+# 安装（需要 root 权限）
+sudo ./install.sh
+```
+
+安装脚本会自动：
+- 复制二进制文件 (`c`, `clad`) 到 `/usr/local/bin`
+- 安装 D-Bus 策略到 `/etc/dbus-1/system.d/`
+- 注册 `clad` 为 systemd 服务
+- 写入默认配置到 `/etc/cli-assistant/config.toml`
+
+```bash
+# 编辑配置 — 填入 API key 和端点地址
+sudo vim /etc/cli-assistant/config.toml
+
+# 测试
+c "如何检查磁盘空间？"
+```
+
+### 从源码编译
 
 ```bash
 # 编译
@@ -34,6 +68,12 @@ sudo ./target/release/clad &          # 启动守护进程
 ```
 
 详细的编译、测试和运行说明请参阅 **[docs/BUILD.md](docs/BUILD.md)**。
+
+### 卸载
+
+```bash
+sudo ./scripts/uninstall.sh
+```
 
 ## 配置说明
 

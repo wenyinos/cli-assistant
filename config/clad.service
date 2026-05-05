@@ -1,0 +1,25 @@
+[Unit]
+Description=cli-assistant daemon (clad)
+Documentation=https://github.com/rhel-lightspeed/command-line-assistant
+After=network.target dbus.service
+Requires=dbus.service
+
+[Service]
+Type=dbus
+BusName=com.redhat.lightspeed.chat
+ExecStart=/usr/local/bin/clad
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=RUST_LOG=info
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/cli-assistant
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

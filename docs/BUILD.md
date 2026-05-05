@@ -271,7 +271,7 @@ cargo test -- --nocapture
 RUST_LOG=debug ./target/debug/clad 2>&1 | head -5
 
 # 预期输出 / Expected:
-# 2024-... INFO  clad 0.5.1 starting
+# 2024-... INFO  clad 0.6.0 starting
 # 2024-... INFO  Configuration loaded successfully
 ```
 
