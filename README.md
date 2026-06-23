@@ -9,7 +9,7 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 ## Features
 
 - **Ask questions in natural language** from your terminal
-- **OpenAI-compatible** — works with OpenAI, Azure OpenAI, local LLMs, or any `/v1/chat/completions` endpoint
+- **OpenAI-compatible** — works with OpenAI, Azure OpenAI, local LLMs, or any OpenAI-compatible endpoint
 - **Chat sessions & history** — persistent SQLite-backed conversation history
 - **Interactive mode** — continuous conversation with context
 - **Markdown rendering** — colored terminal output with code blocks, tables, and headers
@@ -23,7 +23,7 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 Download the latest tarball from [Releases](../../releases), then run the install script:
 
 ```bash
-# Download x86_64 (replace VERSION with actual version, e.g. v0.6.1)
+# Download x86_64 (replace VERSION with actual version, e.g. v0.6.5)
 curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
 # Or download aarch64
@@ -99,7 +99,7 @@ Config file: `/etc/cli-assistant/config.toml`
 
 ```toml
 [backend]
-endpoint  = "https://api.openai.com"   # any OpenAI-compatible endpoint
+endpoint  = "https://api.openai.com/v1"   # any OpenAI-compatible endpoint
 model     = "gpt-4"
 api_key   = "sk-..."
 prompt    = "You are a helpful assistant for Linux system administration."

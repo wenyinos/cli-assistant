@@ -9,7 +9,7 @@
 ## 功能特性
 
 - **自然语言提问** — 直接在终端用自然语言咨询系统管理问题
-- **OpenAI 兼容** — 支持 OpenAI、Azure OpenAI、本地 LLM 或任意 `/v1/chat/completions` 端点
+- **OpenAI 兼容** — 支持 OpenAI、Azure OpenAI、本地 LLM 或任意 OpenAI 兼容端点
 - **会话与历史** — SQLite 持久化对话历史记录
 - **交互模式** — 支持多轮连续对话
 - **Markdown 渲染** — 终端彩色输出，支持代码块、表格、标题
@@ -23,7 +23,7 @@
 从 [Releases](../../releases) 页面下载最新 tarball，然后运行安装脚本：
 
 ```bash
-# 下载 x86_64（将 VERSION 替换为实际版本号，如 v0.6.1）
+# 下载 x86_64（将 VERSION 替换为实际版本号，如 v0.6.5）
 curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
 # 或下载 aarch64
@@ -99,7 +99,7 @@ journalctl -u clad -f          # 查看实时日志
 
 ```toml
 [backend]
-endpoint  = "https://api.openai.com"   # 任意 OpenAI 兼容端点
+endpoint  = "https://api.openai.com/v1"   # 任意 OpenAI 兼容端点
 model     = "gpt-4"
 api_key   = "sk-..."
 prompt    = "You are a helpful assistant for Linux system administration."

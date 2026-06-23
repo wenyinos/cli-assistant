@@ -5,8 +5,9 @@
 
 # ── Backend (OpenAI-compatible API) ──────────────────────────────────────────
 [backend]
-# Base URL of the OpenAI-compatible API. The daemon appends /v1/chat/completions.
-endpoint = "https://api.openai.com"
+# Base URL of the OpenAI-compatible API (include version path, e.g. /v1).
+# The daemon appends /chat/completions automatically.
+endpoint = "https://api.openai.com/v1"
 
 # Model name sent in the request body.
 model = "gpt-4"

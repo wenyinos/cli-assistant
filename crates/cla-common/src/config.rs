@@ -37,13 +37,15 @@ impl Default for AuthSchema {
 
 /// Backend service connection settings.
 ///
-/// Supports any OpenAI-compatible API. The `endpoint` should be the base URL
-/// (e.g. `https://api.openai.com`); the client appends `/v1/chat/completions`.
+/// Supports any OpenAI-compatible API. The `endpoint` should include the
+/// version path (e.g. `https://api.openai.com/v1`); the client appends
+/// `/chat/completions`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BackendSchema {
     /// Base URL of the OpenAI-compatible API endpoint.
-    /// The client appends `/v1/chat/completions` automatically.
+    /// The client appends `/chat/completions` automatically.
+    /// Examples: `https://api.openai.com/v1`, `https://my-proxy.example.com/v1`
     pub endpoint: String,
     /// Model name to use (e.g. `gpt-4`, `gpt-3.5-turbo`).
     pub model: String,
@@ -71,7 +73,7 @@ pub struct BackendSchema {
 impl Default for BackendSchema {
     fn default() -> Self {
         Self {
-            endpoint: String::from("https://api.openai.com"),
+            endpoint: String::from("https://api.openai.com/v1"),
             model: String::from("gpt-4"),
             api_key: String::new(),
             prompt: String::from("You are a helpful assistant for Linux system administration."),
@@ -97,7 +99,7 @@ impl BackendSchema {
     /// The full chat completions endpoint URL.
     pub fn chat_completions_url(&self) -> String {
         let base = self.endpoint.trim_end_matches('/');
-        format!("{}/v1/chat/completions", base)
+        format!("{}/chat/completions", base)
     }
 
     /// Build the effective system prompt, appending language instruction if configured.
@@ -293,18 +295,21 @@ enabled = false
     fn load_from_missing_path_returns_default() {
         let path = PathBuf::from("/nonexistent/path/config.toml");
         let config = AppConfig::load_from_path(&path).expect("load");
-        assert_eq!(config.backend.endpoint, "https://api.openai.com");
+        assert_eq!(config.backend.endpoint, "https://api.openai.com/v1");
         assert_eq!(config.backend.model, "gpt-4");
     }
 
     #[test]
     fn chat_completions_url() {
         let mut backend = BackendSchema::default();
-        backend.endpoint = "https://api.openai.com/".to_string();
+        // default endpoint already includes /v1
         assert_eq!(backend.chat_completions_url(), "https://api.openai.com/v1/chat/completions");
 
-        backend.endpoint = "https://my-proxy.example.com".to_string();
-        assert_eq!(backend.chat_completions_url(), "https://my-proxy.example.com/v1/chat/completions");
+        backend.endpoint = "https://api.openai.com/v1/".to_string();
+        assert_eq!(backend.chat_completions_url(), "https://api.openai.com/v1/chat/completions");
+
+        backend.endpoint = "https://my-proxy.example.com/v2".to_string();
+        assert_eq!(backend.chat_completions_url(), "https://my-proxy.example.com/v2/chat/completions");
     }
 
     #[test]

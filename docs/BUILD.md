@@ -110,7 +110,7 @@ sudo vim /etc/cli-assistant/config.toml
 
 ```toml
 [backend]
-endpoint  = "https://api.openai.com"
+endpoint  = "https://api.openai.com/v1"
 model     = "gpt-4"
 api_key   = "sk-your-api-key-here"
 prompt    = "You are a helpful assistant for Linux system administration."
@@ -132,7 +132,7 @@ level = "INFO"
 
 | 字段 / Field | 类型 / Type | 默认值 / Default | 说明 / Description |
 |---|---|---|---|
-| `backend.endpoint` | string | `https://api.openai.com` | API 基础 URL / API base URL |
+| `backend.endpoint` | string | `https://api.openai.com/v1` | API 基础 URL（含版本路径） / API base URL (with version path) |
 | `backend.model` | string | `gpt-4` | 模型名称 / Model name |
 | `backend.api_key` | string | `""` | API 密钥 / API key |
 | `backend.prompt` | string | `"You are a helpful..."` | 系统提示词 / System prompt |
