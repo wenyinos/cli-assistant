@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::DEFAULT_CONFIG_PATH;
-use crate::environment::get_xdg_config_path;
 use crate::errors::{ClaError, Result};
 
 // ---------------------------------------------------------------------------
@@ -214,39 +213,13 @@ impl AppConfig {
         Ok(config)
     }
 
-    /// Loads configuration from the default config path.
+    /// Loads configuration from `/etc/cli-assistant/config.toml`.
     ///
-    /// Search order:
-    /// 1. `/etc/cli-assistant/config.toml`
-    /// 2. `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` (last match wins)
-    /// 3. `$XDG_CONFIG_HOME/command-line-assistant/config.toml`
-    /// 4. Falls back to default values if no file is found.
+    /// This fixed path is used on all distributions; XDG config variables are
+    /// deliberately not consulted so behaviour is identical everywhere. Falls
+    /// back to default values if the file is missing.
     pub fn load() -> Result<Self> {
-        let mut candidates = vec![PathBuf::from(DEFAULT_CONFIG_PATH)];
-
-        let xdg_dirs = std::env::var_os("XDG_CONFIG_DIRS")
-            .map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
-            .unwrap_or_else(|| vec![PathBuf::from("/etc/xdg")]);
-        candidates.extend(
-            xdg_dirs
-                .into_iter()
-                .map(|dir| dir.join(crate::constants::APP_NAME).join("config.toml")),
-        );
-
-        candidates.push(get_xdg_config_path().join("config.toml"));
-
-        Self::load_from_candidates(&candidates)
-    }
-
-    /// Load the last existing config file from `candidates`, or use defaults.
-    fn load_from_candidates(candidates: &[PathBuf]) -> Result<Self> {
-        let found = candidates.iter().rev().find(|path| path.exists());
-        if let Some(path) = found {
-            return Self::load_from_path(path);
-        }
-
-        tracing::debug!("No config file found, using defaults");
-        Ok(Self::default())
+        Self::load_from_path(std::path::Path::new(DEFAULT_CONFIG_PATH))
     }
 }
 
@@ -331,42 +304,5 @@ enabled = false
     fn database_schema_defaults() {
         let db = DatabaseSchema::default();
         assert_eq!(db.path, PathBuf::from("/var/lib/cli-assistant/cla.db"));
-    }
-
-    #[test]
-    fn load_from_candidates_uses_last_existing_file() {
-        let base = std::env::temp_dir().join(format!("cla-config-test-{}", uuid::Uuid::new_v4()));
-        let first = base.join("first").join("config.toml");
-        let second = base.join("second").join("config.toml");
-        std::fs::create_dir_all(first.parent().unwrap()).unwrap();
-        std::fs::create_dir_all(second.parent().unwrap()).unwrap();
-        std::fs::write(
-            &first,
-            "[backend]\nendpoint = \"https://first.example.com/v1\"\n",
-        )
-        .unwrap();
-        std::fs::write(
-            &second,
-            "[backend]\nendpoint = \"https://second.example.com/v1\"\n",
-        )
-        .unwrap();
-
-        let config =
-            AppConfig::load_from_candidates(&[first.clone(), second.clone()]).expect("load");
-        assert_eq!(config.backend.endpoint, "https://second.example.com/v1");
-
-        let _ = std::fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn load_from_candidates_falls_back_to_defaults() {
-        let base =
-            std::env::temp_dir().join(format!("cla-config-missing-test-{}", uuid::Uuid::new_v4()));
-        let missing = base.join("missing").join("config.toml");
-
-        let config = AppConfig::load_from_candidates(&[missing]).expect("load");
-        assert_eq!(config.backend.endpoint, "https://api.openai.com/v1");
-
-        let _ = std::fs::remove_dir_all(&base);
     }
 }
