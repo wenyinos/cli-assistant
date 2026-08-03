@@ -126,8 +126,7 @@ enabled = true
 ```
 
 API key 也可通过环境变量 `CL_API_KEY` 设置（优先级高于配置文件）。
-daemon 也会搜索 `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` 路径，
-且 `/etc/cli-assistant/config.toml` 优先级最高。
+daemon 在所有发行版上只读取 `/etc/cli-assistant/config.toml` 一个配置文件。
 
 ## 使用方法
 

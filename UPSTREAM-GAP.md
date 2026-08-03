@@ -89,10 +89,10 @@ Python project (local copy at `/home/zemi/MyWork/command-line-assistant`, commit
 
 ### A7. XDG 配置路径感知 / XDG-aware Config Lookup
 
-- **状态 / Status**: 已实现 / Implemented
+- **状态 / Status**: 有意不采用 / Intentionally not adopted
 - **上游参考 / Upstream reference**: `config/__init__.py:26-29, 56-82` + `utils/environment.py:70-111` — 支持 `XDG_CONFIG_DIRS`（如 `/etc/xdg/command-line-assistant/config.toml`）多路径查找
-- **Rust 版现状 / Current state**: `Config::load()` 现在读取 `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` 多路径、`$XDG_CONFIG_HOME`，并保持 `/etc/cli-assistant/config.toml` 最高优先级
-- **建议实现要点 / Implementation notes**: 已实现；候选路径加载逻辑有单元测试
+- **Rust 版现状 / Current state**: 统一固定读取 `/etc/cli-assistant/config.toml`，不依赖 XDG 变量，所有发行版行为一致
+- **建议实现要点 / Implementation notes**: 已实现；`Config::load()` 只加载固定路径，XDG 查询已移除
 
 ---
 

@@ -93,14 +93,11 @@ cargo build -p cla-daemon    # 守护进程 / daemon (bin: clad)
 /etc/cli-assistant/config.toml
 ```
 
-The daemon also looks for
-`$XDG_CONFIG_DIRS/command-line-assistant/config.toml` and
-`$XDG_CONFIG_HOME/command-line-assistant/config.toml`.
-`/etc/cli-assistant/config.toml` always takes precedence.
+The daemon loads its configuration exclusively from
+`/etc/cli-assistant/config.toml` on all distributions (no XDG lookup).
 
-daemon 还会读取 `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` 与
-`$XDG_CONFIG_HOME/command-line-assistant/config.toml`。
-`/etc/cli-assistant/config.toml` 始终优先。
+daemon 在所有发行版上只读取 `/etc/cli-assistant/config.toml` 一个配置文件
+（不做 XDG 查找）。
 
 ### 创建配置 / Create Config
 

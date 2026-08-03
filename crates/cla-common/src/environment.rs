@@ -1,39 +1,13 @@
 //! XDG path resolution for the command-line assistant.
 //!
-//! Maps to Python `utils/environment.py`. Resolves state, data, and config
-//! directories following XDG Base Directory conventions with
-//! application-specific defaults.
+//! Maps to Python `utils/environment.py`. Resolves state and data directories
+//! following XDG Base Directory conventions with application-specific
+//! defaults. Configuration is deliberately loaded from the fixed
+//! `/etc/cli-assistant/config.toml` (see `config.rs`).
 
 use std::path::PathBuf;
 
 use crate::constants::APP_NAME;
-
-/// Returns the XDG config directory path.
-///
-/// Default: `/etc/xdg/command-line-assistant`
-///
-/// Falls back to `$XDG_CONFIG_HOME/command-line-assistant` if the system-wide
-/// path is not accessible, or `~/.config/command-line-assistant` as a last resort.
-pub fn get_xdg_config_path() -> PathBuf {
-    // Primary: system-wide XDG config directory
-    let system_path = PathBuf::from("/etc/xdg").join(APP_NAME);
-    if system_path.is_dir() {
-        return system_path;
-    }
-
-    // Secondary: $XDG_CONFIG_HOME
-    if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
-        let path = PathBuf::from(xdg_config).join(APP_NAME);
-        if path.is_dir() {
-            return path;
-        }
-    }
-
-    // Fallback: ~/.config/<app>
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join(APP_NAME)
-}
 
 /// Returns the XDG state directory path.
 ///
@@ -70,12 +44,6 @@ pub fn get_xdg_data_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn config_path_contains_app_name() {
-        let path = get_xdg_config_path();
-        assert!(path.ends_with(APP_NAME));
-    }
 
     #[test]
     fn state_path_contains_app_name() {

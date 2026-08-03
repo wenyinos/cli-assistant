@@ -620,7 +620,7 @@ const BASH_INTERACTIVE: &str = r#"
 # Command Line Assistant Interactive Mode Integration
 __c_interactive() {
     local old_tty=$(stty -g)
-    local c_binary=/usr/bin/c
+    local c_binary=/usr/local/bin/c
 
     cleanup() {
         stty "$old_tty"

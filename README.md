@@ -126,8 +126,8 @@ enabled = true
 ```
 
 The API key can also be set via the `CL_API_KEY` environment variable (takes precedence over config).
-The daemon also searches `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` paths, with
-`/etc/cli-assistant/config.toml` taking precedence.
+The daemon loads its configuration exclusively from `/etc/cli-assistant/config.toml` on all
+distributions.
 
 ## Usage
 
