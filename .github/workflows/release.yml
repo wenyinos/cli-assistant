@@ -133,10 +133,14 @@ jobs:
             -bb packaging/cli-assistant.spec
 
       - name: Upload RPM artifacts
-        uses: actions/upload-artifact@v4
+        run: |
+          find rpmbuild/RPMS -type f \
+            \( -name 'cli-assistant-[0-9]*.rpm' -o -name 'cli-assistant-selinux-*.rpm' \) \
+            -exec cp -n {} . \;
+      - uses: actions/upload-artifact@v4
         with:
           name: cli-assistant-rpm
-          path: rpmbuild/RPMS/**/*.rpm
+          path: ./*.rpm
 
   release:
     name: Create Release
