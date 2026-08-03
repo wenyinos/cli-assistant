@@ -43,39 +43,38 @@ pushd data/release/selinux
 popd
 
 %install
-%{__install} -d %{buildroot}%{_bindir}
-%{__install} -d %{buildroot}%{_unitdir}
-%{__install} -d %{buildroot}%{_datadir}/dbus-1/system.d
-%{__install} -d %{buildroot}%{_datadir}/dbus-1/system-services
-%{__install} -d %{buildroot}%{_sysconfdir}/xdg/command-line-assistant
-%{__install} -d %{buildroot}%{_sharedstatedir}/cli-assistant
-%{__install} -d %{buildroot}%{_mandir}/man1
-%{__install} -d %{buildroot}%{_mandir}/man8
-%{__install} -d %{buildroot}%{_datadir}/selinux/packages/%{selinuxtype}
+%{__install} -d %{buildroot}/usr/local/bin
+%{__install} -d %{buildroot}/etc/cli-assistant
+%{__install} -d %{buildroot}/etc/systemd/system
+%{__install} -d %{buildroot}/etc/dbus-1/system.d
+%{__install} -d %{buildroot}/usr/share/dbus-1/system-services
+%{__install} -d %{buildroot}/usr/local/share/man/man1
+%{__install} -d %{buildroot}/usr/local/share/man/man8
+%{__install} -d %{buildroot}/var/lib/cli-assistant
+%{__install} -d %{buildroot}/usr/share/selinux/packages/%{selinuxtype}
 
-%{__install} -m 0755 target/release/%{binary_name} %{buildroot}%{_bindir}/%{binary_name}
-%{__install} -m 0755 target/release/%{daemon_binary_name} %{buildroot}%{_bindir}/%{daemon_binary_name}
+%{__install} -m 0755 target/release/%{binary_name} %{buildroot}/usr/local/bin/%{binary_name}
+%{__install} -m 0755 target/release/%{daemon_binary_name} %{buildroot}/usr/local/bin/%{daemon_binary_name}
 
-sed "s|/usr/local/bin/clad|%{_bindir}/clad|" \
-    config/clad.service > %{buildroot}%{_unitdir}/clad.service
+%{__install} -m 0644 config/clad.service %{buildroot}/etc/systemd/system/clad.service
 
 %{__install} -m 0644 config/com.cli-assistant.conf \
-    %{buildroot}%{_datadir}/dbus-1/system.d/com.cli-assistant.conf
+    %{buildroot}/etc/dbus-1/system.d/com.cli-assistant.conf
 %{__install} -m 0644 config/com.redhat.lightspeed.chat.service \
-    %{buildroot}%{_datadir}/dbus-1/system-services/com.redhat.lightspeed.chat.service
+    %{buildroot}/usr/share/dbus-1/system-services/com.redhat.lightspeed.chat.service
 %{__install} -m 0644 config/com.redhat.lightspeed.history.service \
-    %{buildroot}%{_datadir}/dbus-1/system-services/com.redhat.lightspeed.history.service
+    %{buildroot}/usr/share/dbus-1/system-services/com.redhat.lightspeed.history.service
 %{__install} -m 0644 config/com.redhat.lightspeed.user.service \
-    %{buildroot}%{_datadir}/dbus-1/system-services/com.redhat.lightspeed.user.service
+    %{buildroot}/usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service
 
-%{__install} -m 0600 config/config.toml \
-    %{buildroot}%{_sysconfdir}/xdg/command-line-assistant/config.toml
+%{__install} -m 0644 config/config.toml \
+    %{buildroot}/etc/cli-assistant/config.toml
 
-%{__install} -m 0644 data/release/man/%{binary_name}.1 %{buildroot}%{_mandir}/man1/
-%{__install} -m 0644 data/release/man/%{daemon_binary_name}.8 %{buildroot}%{_mandir}/man8/
+%{__install} -m 0644 data/release/man/%{binary_name}.1 %{buildroot}/usr/local/share/man/man1/
+%{__install} -m 0644 data/release/man/%{daemon_binary_name}.8 %{buildroot}/usr/local/share/man/man8/
 
 %{__install} -m 0644 data/release/selinux/%{modulename}.pp.bz2 \
-    %{buildroot}%{_datadir}/selinux/packages/%{selinuxtype}/%{modulename}.pp.bz2
+    %{buildroot}/usr/share/selinux/packages/%{selinuxtype}/%{modulename}.pp.bz2
 
 %preun
 %systemd_preun clad.service
@@ -103,17 +102,17 @@ fi
 %files
 %license LICENSE
 %doc README.md
-%{_bindir}/%{binary_name}
-%{_bindir}/%{daemon_binary_name}
-%{_unitdir}/clad.service
-%{_datadir}/dbus-1/system.d/com.cli-assistant.conf
-%{_datadir}/dbus-1/system-services/com.redhat.lightspeed.chat.service
-%{_datadir}/dbus-1/system-services/com.redhat.lightspeed.history.service
-%{_datadir}/dbus-1/system-services/com.redhat.lightspeed.user.service
-%config(noreplace) %attr(0600, root, root) %{_sysconfdir}/xdg/command-line-assistant/config.toml
-%{_mandir}/man1/%{binary_name}.1.gz
-%{_mandir}/man8/%{daemon_binary_name}.8.gz
-%dir %attr(0700, root, root) %{_sharedstatedir}/cli-assistant
+/usr/local/bin/%{binary_name}
+/usr/local/bin/%{daemon_binary_name}
+/etc/systemd/system/clad.service
+/etc/dbus-1/system.d/com.cli-assistant.conf
+/usr/share/dbus-1/system-services/com.redhat.lightspeed.chat.service
+/usr/share/dbus-1/system-services/com.redhat.lightspeed.history.service
+/usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service
+%config(noreplace) %attr(0644, root, root) /etc/cli-assistant/config.toml
+/usr/local/share/man/man1/%{binary_name}.1*
+/usr/local/share/man/man8/%{daemon_binary_name}.8*
+%dir %attr(0700, root, root) /var/lib/cli-assistant
 
 %files selinux
 %attr(0600, root, root) %{_datadir}/selinux/packages/%{selinuxtype}/%{modulename}.pp.bz2
