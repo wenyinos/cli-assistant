@@ -100,6 +100,9 @@ jobs:
     container:
       image: fedora:latest
     steps:
+      - name: Install git (required for checkout to keep .git)
+        run: dnf install -y git
+
       - uses: actions/checkout@v4
 
       - name: Install RPM build dependencies
