@@ -119,6 +119,7 @@ jobs:
 
       - name: Build RPM
         run: |
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
           mkdir -p "${GITHUB_WORKSPACE}/rpmbuild"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           git archive \
