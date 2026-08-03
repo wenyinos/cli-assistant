@@ -26,5 +26,4 @@ Thumbs.db
 *.db-journal
 *.db-shm
 *.db-wal
-AGENTS.md
-CLAUDE.md
+.zcode/
