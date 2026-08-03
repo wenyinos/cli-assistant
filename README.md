@@ -11,10 +11,12 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 - **Ask questions in natural language** from your terminal
 - **OpenAI-compatible** — works with OpenAI, Azure OpenAI, local LLMs, or any OpenAI-compatible endpoint
 - **Chat sessions & history** — persistent SQLite-backed conversation history
-- **Interactive mode** — continuous conversation with context
+- **Interactive mode** — line-based and full-screen TUI conversations
 - **Markdown rendering** — colored terminal output with code blocks, tables, and headers
 - **Configurable language** — force replies in your preferred language
-- **D-Bus daemon architecture** — client/daemon separation for system-level integration
+- **D-Bus daemon architecture** — client/daemon separation with system activation and caller authorization
+- **Terminal capture** — include recent shell output as question context with `c shell --enable-capture`
+- **Audit logging** — structured audit events through journald-style tracing
 
 ## Installation
 
@@ -23,7 +25,7 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 Download the latest tarball from [Releases](../../releases), then run the install script:
 
 ```bash
-# Download x86_64 (replace VERSION with actual version, e.g. v0.6.5)
+# Download x86_64 (replace VERSION with actual version, e.g. v0.8.0)
 curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
 # Or download aarch64
@@ -40,7 +42,9 @@ sudo ./install.sh
 The install script will:
 - Copy binaries (`c`, `clad`) to `/usr/local/bin`
 - Install D-Bus policy to `/etc/dbus-1/system.d/`
+- Install D-Bus activation services to `/usr/share/dbus-1/system-services/`
 - Register `clad` as a systemd service
+- Install `c(1)` and `clad(8)` man pages
 - Write default config to `/etc/cli-assistant/config.toml`
 
 ```bash
@@ -116,9 +120,14 @@ enabled = true
 
 [logging]
 level = "INFO"
+
+[logging.audit]
+enabled = true
 ```
 
 The API key can also be set via the `CL_API_KEY` environment variable (takes precedence over config).
+The daemon also searches `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` paths, with
+`/etc/cli-assistant/config.toml` taking precedence.
 
 ## Usage
 
@@ -126,6 +135,7 @@ The API key can also be set via the `CL_API_KEY` environment variable (takes pre
 c "question"                    # ask a question (default: chat)
 c chat "question"               # same as above
 c chat --interactive            # interactive conversation mode
+c chat --tui                    # full-screen TUI conversation mode
 c chat -a /path/to/file "explain this"  # attach a file
 c history --all                 # view all history
 c history --filter "keyword"    # search history

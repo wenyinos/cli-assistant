@@ -67,10 +67,20 @@ jobs:
           cp config/config.toml           package/cli-assistant/config/
           cp config/com.cli-assistant.conf package/cli-assistant/config/
           cp config/clad.service          package/cli-assistant/config/
+          cp config/com.redhat.lightspeed.chat.service \
+              package/cli-assistant/config/
+          cp config/com.redhat.lightspeed.history.service \
+              package/cli-assistant/config/
+          cp config/com.redhat.lightspeed.user.service \
+              package/cli-assistant/config/
 
           # Install scripts
           cp scripts/install.sh           package/cli-assistant/
           cp scripts/uninstall.sh         package/cli-assistant/
+
+          # Release assets
+          cp -a data/release              package/cli-assistant/
+          cp -a packaging                 package/cli-assistant/
 
           # License & docs
           cp LICENSE README.md            package/cli-assistant/
@@ -84,9 +94,49 @@ jobs:
           name: ${{ matrix.archive }}
           path: ${{ matrix.archive }}
 
+  rpm:
+    name: Build RPM
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RPM build dependencies
+        run: |
+          dnf install -y \
+            bzip2 \
+            cargo \
+            gcc \
+            git \
+            rpm-build \
+            rust \
+            selinux-policy-devel \
+            systemd
+
+      - name: Build RPM
+        run: |
+          VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
+          mkdir -p "${GITHUB_WORKSPACE}/rpmbuild"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          git archive \
+            --format=tar.gz \
+            --prefix="cli-assistant-${VERSION}/" \
+            -o "${GITHUB_WORKSPACE}/rpmbuild/SOURCES/v${VERSION}.tar.gz" \
+            HEAD
+          rpmbuild \
+            --define "_topdir ${GITHUB_WORKSPACE}/rpmbuild" \
+            --define "_sourcedir ${GITHUB_WORKSPACE}/rpmbuild/SOURCES" \
+            -bb packaging/cli-assistant.spec
+
+      - name: Upload RPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-assistant-rpm
+          path: rpmbuild/RPMS/**/*.rpm
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, rpm]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -99,4 +149,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: "*.tar.gz"
+          files: |
+            *.tar.gz
+            *.rpm

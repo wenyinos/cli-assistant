@@ -87,19 +87,14 @@ impl ChatRepository {
     /// Find a non-deleted chat by its primary key.
     #[allow(dead_code)]
     pub async fn select_by_id(&self, id: &str) -> Result<Option<ChatModel>, sqlx::Error> {
-        sqlx::query_as::<_, ChatModel>(
-            "SELECT * FROM chats WHERE id = $1 AND deleted_at IS NULL",
-        )
-        .bind(id)
-        .fetch_optional(self.manager.pool())
-        .await
+        sqlx::query_as::<_, ChatModel>("SELECT * FROM chats WHERE id = $1 AND deleted_at IS NULL")
+            .bind(id)
+            .fetch_optional(self.manager.pool())
+            .await
     }
 
     /// Return all non-deleted chats for a user, newest first.
-    pub async fn select_all_by_user(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<ChatModel>, sqlx::Error> {
+    pub async fn select_all_by_user(&self, user_id: &str) -> Result<Vec<ChatModel>, sqlx::Error> {
         sqlx::query_as::<_, ChatModel>(
             "SELECT * FROM chats
              WHERE user_id = $1 AND deleted_at IS NULL
@@ -113,14 +108,12 @@ impl ChatRepository {
     /// Soft-delete a chat by setting `deleted_at`.
     pub async fn soft_delete(&self, id: &str) -> Result<(), sqlx::Error> {
         let ts = now_str();
-        sqlx::query(
-            "UPDATE chats SET deleted_at = $1, updated_at = $2 WHERE id = $3",
-        )
-        .bind(&ts)
-        .bind(&ts)
-        .bind(id)
-        .execute(self.manager.pool())
-        .await?;
+        sqlx::query("UPDATE chats SET deleted_at = $1, updated_at = $2 WHERE id = $3")
+            .bind(&ts)
+            .bind(&ts)
+            .bind(id)
+            .execute(self.manager.pool())
+            .await?;
         Ok(())
     }
 
@@ -154,11 +147,7 @@ impl HistoryRepository {
     }
 
     /// Insert a new history record.
-    pub async fn insert(
-        &self,
-        user_id: &str,
-        chat_id: &str,
-    ) -> Result<HistoryModel, sqlx::Error> {
+    pub async fn insert(&self, user_id: &str, chat_id: &str) -> Result<HistoryModel, sqlx::Error> {
         let id = new_id();
         let ts = now_str();
         sqlx::query_as::<_, HistoryModel>(
@@ -342,14 +331,12 @@ impl InteractionRepository {
     #[allow(dead_code)]
     pub async fn soft_delete(&self, id: &str) -> Result<(), sqlx::Error> {
         let ts = now_str();
-        sqlx::query(
-            "UPDATE interactions SET deleted_at = $1, updated_at = $2 WHERE id = $3",
-        )
-        .bind(&ts)
-        .bind(&ts)
-        .bind(id)
-        .execute(self.manager.pool())
-        .await?;
+        sqlx::query("UPDATE interactions SET deleted_at = $1, updated_at = $2 WHERE id = $3")
+            .bind(&ts)
+            .bind(&ts)
+            .bind(id)
+            .execute(self.manager.pool())
+            .await?;
         Ok(())
     }
 }

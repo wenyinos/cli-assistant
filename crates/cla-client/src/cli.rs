@@ -37,6 +37,10 @@ pub enum Commands {
         #[arg(short, long)]
         interactive: bool,
 
+        /// Start a full-screen interactive TUI chat session.
+        #[arg(long)]
+        tui: bool,
+
         /// Add output from terminal as context (1 = latest, 2 = second latest, etc.).
         /// Requires terminal capture to be enabled via `c shell --enable-capture`.
         #[arg(short = 'w', long)]

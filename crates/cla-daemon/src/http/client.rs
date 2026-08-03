@@ -43,8 +43,9 @@ pub fn create_client(config: &Config) -> Result<Client, ClaError> {
 
     // HTTP proxies
     for (proto, proxy_url) in &config.backend.proxies {
-        let proxy = reqwest::Proxy::all(proxy_url)
-            .map_err(|e| ClaError::config_with_source(format!("invalid proxy URL '{}'", proto), e))?;
+        let proxy = reqwest::Proxy::all(proxy_url).map_err(|e| {
+            ClaError::config_with_source(format!("invalid proxy URL '{}'", proto), e)
+        })?;
         builder = builder.proxy(proxy);
     }
 

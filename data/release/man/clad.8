@@ -1,0 +1,26 @@
+.TH CLAD 8 "2026-08-03" "0.8.0" "cli-assistant"
+.SH NAME
+clad \- Command Line Assistant daemon
+.SH SYNOPSIS
+.B clad
+.SH DESCRIPTION
+clad is the D-Bus daemon behind cli-assistant. It owns the
+com.redhat.lightspeed.chat, com.redhat.lightspeed.history, and
+com.redhat.lightspeed.user service names on the system bus, sends requests to
+the configured OpenAI-compatible API, and stores history in SQLite.
+.SH CONFIGURATION
+The daemon reads configuration from /etc/cli-assistant/config.toml, with XDG
+configuration paths and defaults as documented in the README.
+.SH SIGNALS
+.TP
+.B SIGTERM
+Stop the daemon.
+.SH FILES
+.TP
+.I /etc/cli-assistant/config.toml
+Main configuration file.
+.TP
+.I /var/lib/cli-assistant/cla.db
+SQLite history database.
+.SH SEE ALSO
+.BR c (1)

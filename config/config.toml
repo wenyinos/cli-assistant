@@ -58,5 +58,5 @@ enabled = true
 level = "INFO"
 
 # Audit logging (writes structured JSON for journald consumption).
-# [logging.audit]
-# enabled = true
+[logging.audit]
+enabled = true

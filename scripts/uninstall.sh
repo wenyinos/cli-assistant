@@ -37,12 +37,21 @@ fi
 info "Removing binaries ..."
 rm -f /usr/local/bin/c /usr/local/bin/clad
 
+info "Removing man pages ..."
+rm -f /usr/local/share/man/man1/c.1
+rm -f /usr/local/share/man/man8/clad.8
+
 info "Removing systemd service ..."
 rm -f /etc/systemd/system/clad.service
 systemctl daemon-reload
 
 info "Removing D-Bus policy ..."
 rm -f /etc/dbus-1/system.d/com.cli-assistant.conf
+
+info "Removing D-Bus activation services ..."
+rm -f /usr/share/dbus-1/system-services/com.redhat.lightspeed.chat.service
+rm -f /usr/share/dbus-1/system-services/com.redhat.lightspeed.history.service
+rm -f /usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service
 
 if systemctl is-active --quiet dbus; then
     systemctl reload dbus 2>/dev/null || true

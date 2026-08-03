@@ -121,14 +121,49 @@ impl LocalHistory {
         Ok(())
     }
 
-    pub async fn clear_from_chat(
-        &self,
-        user_id: &str,
-        from_chat: &str,
-    ) -> anyhow::Result<()> {
+    pub async fn clear_from_chat(&self, user_id: &str, from_chat: &str) -> anyhow::Result<()> {
         self.history_repo
             .delete_by_chat_name(user_id, from_chat)
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_config() -> Config {
+        let mut config = Config::default();
+        config.database.path =
+            std::env::temp_dir().join(format!("cla-local-history-{}.db", uuid::Uuid::new_v4()));
+        config
+    }
+
+    #[tokio::test]
+    async fn write_and_read_preserves_question_and_response() {
+        let config = Arc::new(temp_config());
+        let manager = DatabaseManager::new(&config).await.expect("database");
+        let chat = ChatRepository::new(manager)
+            .insert("user-1", "default", Some("Default chat"))
+            .await
+            .expect("chat");
+        let history = LocalHistory::new(config).await.expect("history");
+
+        history
+            .write(
+                &chat.id,
+                "user-1",
+                "How do I check disk space?",
+                "Use df -h.",
+            )
+            .await
+            .expect("write");
+
+        let entries = history.read("user-1").await.expect("read");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].question, "How do I check disk space?");
+        assert_eq!(entries[0].response, "Use df -h.");
+        assert_ne!(entries[0].question, entries[0].response);
     }
 }

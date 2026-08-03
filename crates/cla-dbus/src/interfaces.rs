@@ -35,9 +35,7 @@
 //! ```
 
 use crate::exceptions::ClaDbusError;
-use crate::structures::{
-    ChatList, HistoryList, Question, Response,
-};
+use crate::structures::{ChatList, HistoryList, Question, Response};
 
 // ===========================================================================
 // Chat interface  —  com.redhat.lightspeed.chat

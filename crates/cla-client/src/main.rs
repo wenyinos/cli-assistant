@@ -4,6 +4,7 @@ mod cli;
 mod dbus_client;
 mod rendering;
 mod terminal;
+mod tui;
 
 use std::io::{self, IsTerminal, Read};
 use std::process;
@@ -12,7 +13,7 @@ use clap::Parser;
 
 use cla_common::environment::get_xdg_state_path;
 use cla_common::files;
-use cla_dbus::structures::{AttachmentInput, Question, StdinInput, TerminalInput};
+use cla_dbus::structures::{AttachmentInput, Question, Response, StdinInput, TerminalInput};
 
 use cli::{Cli, Commands};
 use dbus_client::DbusClient;
@@ -22,7 +23,8 @@ use rendering::Renderer;
 const MAX_QUESTION_SIZE: usize = 32_000;
 
 /// Legal notice shown once per session.
-const LEGAL_NOTICE: &str = "This feature uses AI technology. Do not include any personal information or \
+const LEGAL_NOTICE: &str =
+    "This feature uses AI technology. Do not include any personal information or \
     other sensitive information in your input. Interactions may be used to \
     improve Red Hat's products or services.";
 
@@ -39,7 +41,15 @@ const DEFAULT_CHAT_DESCRIPTION: &str = "Default Command Line Assistant Chat.";
 const SUBCOMMANDS: &[&str] = &["chat", "history", "feedback", "shell"];
 
 /// Global flags that should be preserved before the subcommand.
-const GLOBAL_FLAGS: &[&str] = &["-p", "--plain", "--debug", "--version", "-v", "-h", "--help"];
+const GLOBAL_FLAGS: &[&str] = &[
+    "-p",
+    "--plain",
+    "--debug",
+    "--version",
+    "-v",
+    "-h",
+    "--help",
+];
 
 /// Inject "chat" as the default subcommand when the user runs `c "question"`
 /// without explicitly naming a subcommand. Mirrors Python's `add_default_command`.
@@ -82,21 +92,24 @@ async fn main() {
 
     // Setup logging if debug mode is enabled.
     if cli.debug {
-        tracing_subscriber::fmt()
-            .with_env_filter("debug")
-            .init();
+        tracing_subscriber::fmt().with_env_filter("debug").init();
     }
 
     let renderer = Renderer::new(cli.plain);
 
-    // Read stdin if available.
-    let stdin = read_stdin();
+    // Read stdin if available. The shell capture command consumes stdin itself,
+    // so leave the pipe intact for the PTY child.
+    let stdin = match &cli.command {
+        Some(Commands::Shell { .. }) => None,
+        _ => read_stdin(),
+    };
 
     // If no command specified, default to chat.
     let command = cli.command.unwrap_or(Commands::Chat {
         query_string: None,
         attachment: None,
         interactive: false,
+        tui: false,
         with_output: None,
         list: false,
         delete: None,
@@ -110,6 +123,7 @@ async fn main() {
             query_string,
             attachment,
             interactive,
+            tui,
             with_output,
             list,
             delete,
@@ -123,6 +137,7 @@ async fn main() {
                 stdin,
                 attachment,
                 interactive,
+                tui,
                 with_output,
                 list,
                 delete,
@@ -159,7 +174,12 @@ async fn main() {
             enable_capture,
             enable_interactive,
             disable_interactive,
-        } => handle_shell(&renderer, enable_capture, enable_interactive, disable_interactive),
+        } => handle_shell(
+            &renderer,
+            enable_capture,
+            enable_interactive,
+            disable_interactive,
+        ),
     };
 
     process::exit(exit_code);
@@ -176,6 +196,7 @@ async fn handle_chat(
     stdin: Option<String>,
     attachment: Option<String>,
     interactive: bool,
+    tui: bool,
     with_output: Option<usize>,
     list: bool,
     delete: Option<String>,
@@ -266,12 +287,33 @@ async fn handle_chat(
         },
     };
 
+    if tui {
+        if terminal::capture_active() {
+            renderer.error(
+                "Terminal capture is active. Exit the capture shell before starting the TUI.",
+            );
+            return 1;
+        }
+        return tui::run(dbus, user_id, chat_id, stdin, plain).await;
+    }
+
     if interactive {
+        if terminal::capture_active() {
+            renderer.error(
+                "Terminal capture is active. Exit the capture shell before starting interactive chat.",
+            );
+            return 1;
+        }
         return handle_interactive_chat(renderer, &dbus, &user_id, &chat_id, stdin, plain).await;
     }
 
     // Gather input
-    let question_text = gather_input(query_string, stdin.clone(), attachment.as_deref(), with_output);
+    let question_text = gather_input(
+        query_string,
+        stdin.clone(),
+        attachment.as_deref(),
+        with_output,
+    );
 
     if question_text.trim().len() < 2 {
         renderer.error("Your query needs to have at least 2 characters.");
@@ -279,15 +321,13 @@ async fn handle_chat(
     }
 
     // Trim to max size
-    let question_text = if question_text.len() > MAX_QUESTION_SIZE {
+    let (question_text, truncated) = trim_question(&question_text, MAX_QUESTION_SIZE);
+    if truncated {
         renderer.warning(&format!(
             "Question exceeds {}KB limit. Trimming to fit.",
             MAX_QUESTION_SIZE / 1000
         ));
-        question_text[..MAX_QUESTION_SIZE].to_string()
-    } else {
-        question_text
-    };
+    }
 
     // Show legal notice once
     show_legal_notice_once(renderer);
@@ -303,10 +343,8 @@ async fn handle_chat(
         }),
         terminal: with_output.map(|_| {
             let blocks = terminal::parse_terminal_output();
-            let output = terminal::find_output_by_index(
-                -(with_output.unwrap_or(1) as isize),
-                &blocks,
-            );
+            let output =
+                terminal::find_output_by_index(-(with_output.unwrap_or(1) as isize), &blocks);
             TerminalInput { output }
         }),
         systeminfo: None,
@@ -314,7 +352,7 @@ async fn handle_chat(
 
     // Show spinner and submit
     eprint!("⁺₊+ Asking RHEL Lightspeed...");
-    let response = match dbus.ask_question(&user_id, question).await {
+    let response = match dbus.ask_question(&user_id, &question).await {
         Ok(r) => r,
         Err(e) => {
             eprintln!();
@@ -328,8 +366,9 @@ async fn handle_chat(
     display_response(renderer, &response.message);
 
     // Write history
+    let (stored_question, stored_response) = history_payload(&question, &response);
     let _ = dbus
-        .write_history(&chat_id, &user_id, &response.message, &response.message)
+        .write_history(&chat_id, &user_id, &stored_question, &stored_response)
         .await;
 
     0
@@ -377,12 +416,13 @@ async fn handle_interactive_chat(
         };
 
         eprint!("⁺₊+ Asking RHEL Lightspeed...");
-        match dbus.ask_question(user_id, question).await {
+        match dbus.ask_question(user_id, &question).await {
             Ok(response) => {
                 eprintln!();
                 display_response(renderer, &response.message);
+                let (stored_question, stored_response) = history_payload(&question, &response);
                 let _ = dbus
-                    .write_history(chat_id, user_id, &response.message, &response.message)
+                    .write_history(chat_id, user_id, &stored_question, &stored_response)
                     .await;
             }
             Err(e) => {
@@ -399,6 +439,7 @@ async fn handle_interactive_chat(
 // History command
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_history(
     renderer: &Renderer,
     from_chat: &str,
@@ -475,8 +516,7 @@ async fn handle_history(
     } else if last {
         dbus.get_last_conversation(&user_id, from_chat).await
     } else if let Some(f) = filter {
-        dbus.get_filtered_conversation(&user_id, f, from_chat)
-            .await
+        dbus.get_filtered_conversation(&user_id, f, from_chat).await
     } else {
         dbus.get_history(&user_id).await
     };
@@ -515,7 +555,8 @@ fn handle_feedback(renderer: &Renderer) -> i32 {
          sensitive information in your feedback. Feedback may \
          be used to improve Red Hat's products or services.",
     );
-    renderer.normal("To submit feedback, use the following email address: <cla-feedback@redhat.com>.");
+    renderer
+        .normal("To submit feedback, use the following email address: <cla-feedback@redhat.com>.");
     0
 }
 
@@ -538,14 +579,37 @@ fn handle_shell(
     }
 
     if enable_capture {
+        if terminal::capture_active() {
+            renderer.error(
+                "A terminal capture session is already running. Stop it before starting a new one.",
+            );
+            return 1;
+        }
+
+        let lock = match files::NamedFileLock::new("terminal") {
+            Ok(lock) => lock,
+            Err(e) => {
+                renderer.error(&format!("Failed to open terminal capture lock: {}", e));
+                return 1;
+            }
+        };
+        if let Err(e) = lock.acquire() {
+            renderer.error(&format!("Failed to acquire terminal capture lock: {}", e));
+            return 1;
+        }
+
         renderer.normal("Starting terminal reader. Press Ctrl + D to stop the capturing.");
         renderer.normal(&format!(
             "Terminal capture log is being written to {}",
             terminal::terminal_capture_file().display()
         ));
-        // TODO: Implement PTY spawn (requires nix crate integration)
-        renderer.warning("Terminal capture is not yet implemented in the Rust version.");
-        return 0;
+        return match terminal::start_capture() {
+            Ok(()) => 0,
+            Err(e) => {
+                renderer.error(&format!("Terminal capture failed: {}", e));
+                1
+            }
+        };
     }
 
     renderer.warning("No operation specified. Use --help to see available options.");
@@ -581,9 +645,7 @@ bind -x '"\C-g": __c_interactive'
 "#;
 
 fn write_bashrc_integration(renderer: &Renderer, filename: &str, contents: &str) -> i32 {
-    let bashrc_d = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".bashrc.d");
+    let bashrc_d = dirs::home_dir().unwrap_or_default().join(".bashrc.d");
 
     if let Err(e) = files::create_folder(&bashrc_d, true, 0o700) {
         renderer.error(&format!("Failed to create bashrc.d directory: {}", e));
@@ -681,13 +743,25 @@ fn gather_input(
     }
     if with_output.is_some() {
         let blocks = terminal::parse_terminal_output();
-        let output =
-            terminal::find_output_by_index(-(with_output.unwrap_or(1) as isize), &blocks);
+        let output = terminal::find_output_by_index(-(with_output.unwrap_or(1) as isize), &blocks);
         if !output.is_empty() {
             return output;
         }
     }
     String::new()
+}
+
+/// Trim a question to `max_bytes` without splitting a UTF-8 character.
+fn trim_question(question: &str, max_bytes: usize) -> (String, bool) {
+    if question.len() <= max_bytes {
+        return (question.to_string(), false);
+    }
+
+    let mut end = max_bytes;
+    while !question.is_char_boundary(end) {
+        end -= 1;
+    }
+    (question[..end].to_string(), true)
 }
 
 /// Show the legal notice once per parent PID.
@@ -719,7 +793,88 @@ fn display_response(renderer: &Renderer, response: &str) {
     renderer.notice(ALWAYS_LEGAL_MESSAGE);
 }
 
+/// Build the question/response pair that should be persisted to history.
+pub(crate) fn history_payload(question: &Question, response: &Response) -> (String, String) {
+    (question.message.clone(), response.message.clone())
+}
+
 /// Get parent PID.
 fn getppid() -> u32 {
     unsafe { libc::getppid() as u32 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn question(message: &str) -> Question {
+        Question {
+            message: message.to_string(),
+            stdin: None,
+            attachment: None,
+            terminal: None,
+            systeminfo: None,
+        }
+    }
+
+    #[test]
+    fn history_payload_preserves_question_and_response() {
+        let question = question("How do I check disk space?");
+        let response = Response {
+            message: "Use df -h.".to_string(),
+        };
+
+        let (stored_question, stored_response) = history_payload(&question, &response);
+
+        assert_eq!(stored_question, "How do I check disk space?");
+        assert_eq!(stored_response, "Use df -h.");
+        assert_ne!(stored_question, stored_response);
+    }
+
+    #[test]
+    fn add_default_command_injects_chat() {
+        let args = vec!["c".to_string(), "How do I check disk?".to_string()];
+        let result = add_default_command(args);
+        assert_eq!(
+            result,
+            vec![
+                "c".to_string(),
+                "chat".to_string(),
+                "How do I check disk?".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn gather_input_prioritizes_query_over_stdin() {
+        let input = gather_input(
+            Some("query".to_string()),
+            Some("stdin".to_string()),
+            None,
+            None,
+        );
+        assert_eq!(input, "query");
+    }
+
+    #[test]
+    fn tui_flag_parses_for_chat() {
+        let cli = Cli::try_parse_from(["c", "chat", "--tui"]).expect("parse");
+        match cli.command {
+            Some(Commands::Chat { tui, .. }) => assert!(tui),
+            _ => panic!("expected chat command"),
+        }
+    }
+
+    #[test]
+    fn trim_question_respects_byte_limit_and_utf8_boundaries() {
+        let (trimmed, truncated) = trim_question("hello", 3);
+        assert_eq!(trimmed, "hel");
+        assert!(truncated);
+
+        let text = "你好世界";
+        let (trimmed, truncated) = trim_question(text, 5);
+        assert_eq!(trimmed, "你");
+        assert!(truncated);
+        assert!(trimmed.is_char_boundary(trimmed.len()));
+    }
 }

@@ -50,11 +50,7 @@ impl HistoryBackend {
         }
     }
 
-    async fn clear_from_chat(
-        &self,
-        user_id: &str,
-        from_chat: &str,
-    ) -> anyhow::Result<()> {
+    async fn clear_from_chat(&self, user_id: &str, from_chat: &str) -> anyhow::Result<()> {
         match self {
             Self::Local(p) => p.clear_from_chat(user_id, from_chat).await,
         }
@@ -96,20 +92,14 @@ impl HistoryManager {
         query: &str,
         response: &str,
     ) -> anyhow::Result<()> {
-        self.backend
-            .write(chat_id, user_id, query, response)
-            .await
+        self.backend.write(chat_id, user_id, query, response).await
     }
 
     pub async fn clear(&self, user_id: &str) -> anyhow::Result<()> {
         self.backend.clear(user_id).await
     }
 
-    pub async fn clear_from_chat(
-        &self,
-        user_id: &str,
-        from_chat: &str,
-    ) -> anyhow::Result<()> {
+    pub async fn clear_from_chat(&self, user_id: &str, from_chat: &str) -> anyhow::Result<()> {
         self.backend.clear_from_chat(user_id, from_chat).await
     }
 }

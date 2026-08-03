@@ -42,7 +42,7 @@ No clippy/rustfmt config in-repo; CI (`.github/workflows/release.yml`) builds `x
 - **Endpoint URLs (v0.6.5+):** `backend.endpoint` in config includes the API version path (default `https://api.openai.com/v1`). `BackendConfig::chat_completions_url()` (cla-common/src/config.rs:100) appends only `/chat/completions` and trims a trailing `/`. Never append `/v1` again — mirrors with custom version paths (e.g. `/v2`) are supported.
 - **Config:** `/etc/cli-assistant/config.toml`. `CL_API_KEY` env var overrides `backend.api_key`. The daemon must be restarted (`sudo systemctl restart clad`) after config changes. Default DB path is `/var/lib/cli-assistant/cla.db` (systemd-compatible), even though the README example shows `~/.local/share/...`.
 - **Logging:** `tracing` + `tracing-subscriber`; control via `RUST_LOG` (e.g. `RUST_LOG=cla_daemon::http=debug`). `NO_COLOR` disables ANSI colors.
-- **Version bumps:** `workspace.package.version` (currently 0.6.5). Version-stamped releases also touch README.md, README.zh-CN.md, docs/BUILD.md, and config/config.toml in sync — check commit history for the pattern.
+- **Version bumps:** `workspace.package.version` (currently 0.8.0). Version-stamped releases also touch README.md, README.zh-CN.md, docs/BUILD.md, and config/config.toml in sync — check commit history for the pattern.
 - **Docs are bilingual:** README.md (EN), README.zh-CN.md (CN), docs/BUILD.md (bilingual inline). When editing one, update the mirror.
 - **Testing the daemon** requires the D-Bus system bus and root: `sudo RUST_LOG=debug ./target/debug/clad`, then `./target/debug/c "question"` in another shell.
 

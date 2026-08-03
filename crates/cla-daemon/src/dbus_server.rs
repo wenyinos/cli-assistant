@@ -23,7 +23,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
 
     let chat = ChatInterface::new(config.clone()).await?;
     let history = HistoryInterface::new(config.clone()).await?;
-    let user = UserInterface::new();
+    let user = UserInterface::new()?;
 
     let _conn = Builder::system()?
         .name(CHAT_IDENTIFIER)?

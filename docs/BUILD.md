@@ -93,6 +93,15 @@ cargo build -p cla-daemon    # 守护进程 / daemon (bin: clad)
 /etc/cli-assistant/config.toml
 ```
 
+The daemon also looks for
+`$XDG_CONFIG_DIRS/command-line-assistant/config.toml` and
+`$XDG_CONFIG_HOME/command-line-assistant/config.toml`.
+`/etc/cli-assistant/config.toml` always takes precedence.
+
+daemon 还会读取 `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` 与
+`$XDG_CONFIG_HOME/command-line-assistant/config.toml`。
+`/etc/cli-assistant/config.toml` 始终优先。
+
 ### 创建配置 / Create Config
 
 ```bash
@@ -126,6 +135,9 @@ enabled = true
 
 [logging]
 level = "INFO"
+
+[logging.audit]
+enabled = true
 ```
 
 ### 配置字段说明 / Config Fields
@@ -197,6 +209,7 @@ echo "What is SELinux?" | ./target/debug/c
 
 # 交互模式 / Interactive mode
 ./target/debug/c chat --interactive
+./target/debug/c chat --tui
 
 # 查看历史 / View history
 ./target/debug/c history --all
@@ -212,6 +225,7 @@ echo "What is SELinux?" | ./target/debug/c
 # Shell 集成 / Shell integration
 ./target/debug/c shell --enable-interactive
 ./target/debug/c shell --disable-interactive
+./target/debug/c shell --enable-capture
 ```
 
 ### 4. 完整端到端测试 / Full E2E Test
@@ -261,8 +275,8 @@ cargo test -- --nocapture
 |---|---|
 | `cla-common` | 配置序列化/反序列化、UUID 生成、文件操作、XDG 路径 |
 | `cla-dbus` | D-Bus 错误类型转换 |
-| `cla-daemon` | (运行时集成测试 / runtime integration) |
-| `cla-client` | (运行时集成测试 / runtime integration) |
+| `cla-daemon` | D-Bus 授权、history enabled 守卫、HTTP payload/status（单元测试） |
+| `cla-client` | 参数合成、历史写入、终端捕获解析、Markdown 渲染（单元测试） |
 
 ### 验证配置加载 / Verify Config Loading
 
@@ -315,6 +329,29 @@ curl -X POST https://api.openai.com/v1/chat/completions \
     "max_tokens": 100
   }'
 ```
+
+## 发布资产 / Release Assets
+
+### SELinux 策略 / SELinux Policy
+
+```bash
+make -C data/release/selinux cli_assistant.pp.bz2
+sudo semodule -i data/release/selinux/cli_assistant.pp
+```
+
+策略覆盖 `/usr/local/bin/clad`、`/var/lib/cli-assistant` 与
+`com.redhat.lightspeed.*` D-Bus 通信。
+
+### RPM 打包 / RPM Packaging
+
+```bash
+mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+spectool -g -R packaging/cli-assistant.spec
+rpmbuild -ba packaging/cli-assistant.spec
+```
+
+Spec 会构建静态 Rust 二进制、安装 systemd/D-Bus 激活文件、man pages 和
+SELinux 策略子包。
 
 ---
 

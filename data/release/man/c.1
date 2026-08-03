@@ -1,0 +1,47 @@
+.TH C 1 "2026-08-03" "0.8.0" "cli-assistant"
+.SH NAME
+c \- Command Line Assistant client
+.SH SYNOPSIS
+.B c
+[\fIOPTIONS\fR] [\fICOMMAND\fR] [\fIARGS\fR...]
+.SH DESCRIPTION
+The Command Line Assistant client sends questions to the cli-assistant daemon
+over the system D-Bus and renders the response in the terminal.
+.SH OPTIONS
+.TP
+.BR \-p ", " \-\-plain
+Disable colors and rich rendering.
+.TP
+.BR \-\-debug
+Enable debug logging.
+.TP
+.BR \-h ", " \-\-help
+Show help.
+.TP
+.BR \-v ", " \-\-version
+Show version.
+.SH SUBCOMMANDS
+.TP
+.B chat
+Ask a question. If no subcommand is supplied, \fBchat\fR is used by default.
+Supports stdin, attachments, interactive mode, chat management, and
+\fB\-\-with-output\fR terminal context. Use \fBchat \-\-tui\fR for a
+full-screen TUI conversation window.
+.TP
+.B history
+Read, filter, or clear conversation history.
+.TP
+.B feedback
+Show feedback instructions.
+.TP
+.B shell
+Install or remove shell integrations and start terminal capture.
+.SH FILES
+.TP
+.I ~/.bashrc.d/cla-interactive.bashrc
+Bash keybinding for interactive mode.
+.TP
+.I ~/.local/state/command-line-assistant/terminal.log
+Terminal capture log while capture is active.
+.SH SEE ALSO
+.BR clad (8)

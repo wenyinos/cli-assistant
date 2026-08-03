@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.6.5"
+version = "0.8.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/wenyinos/cli-assistant"
@@ -44,12 +44,9 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
-# Terminal / Rendering
+# TUI
 crossterm = "0.28"
-termimad = "0.30"
-
-# Markdown
-pulldown-cmark = "0.12"
+ratatui = "0.29"
 
 # File locking
 fs2 = "0.4"

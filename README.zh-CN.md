@@ -11,10 +11,12 @@
 - **自然语言提问** — 直接在终端用自然语言咨询系统管理问题
 - **OpenAI 兼容** — 支持 OpenAI、Azure OpenAI、本地 LLM 或任意 OpenAI 兼容端点
 - **会话与历史** — SQLite 持久化对话历史记录
-- **交互模式** — 支持多轮连续对话
+- **交互模式** — 支持命令行与全屏 TUI 多轮对话
 - **Markdown 渲染** — 终端彩色输出，支持代码块、表格、标题
 - **语言配置** — 可指定 AI 回复语言（如中文、英文、日文等）
-- **D-Bus 守护进程架构** — 客户端/服务端分离，支持系统级集成
+- **D-Bus 守护进程架构** — 客户端/服务端分离，支持系统自动激活与调用方授权
+- **终端捕获** — 通过 `c shell --enable-capture` 把最近终端输出作为问题上下文
+- **审计日志** — 通过结构化 tracing 输出审计事件
 
 ## 安装方式
 
@@ -23,7 +25,7 @@
 从 [Releases](../../releases) 页面下载最新 tarball，然后运行安装脚本：
 
 ```bash
-# 下载 x86_64（将 VERSION 替换为实际版本号，如 v0.6.5）
+# 下载 x86_64（将 VERSION 替换为实际版本号，如 v0.8.0）
 curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
 
 # 或下载 aarch64
@@ -40,7 +42,9 @@ sudo ./install.sh
 安装脚本会自动：
 - 复制二进制文件 (`c`, `clad`) 到 `/usr/local/bin`
 - 安装 D-Bus 策略到 `/etc/dbus-1/system.d/`
+- 安装 D-Bus 自动激活服务到 `/usr/share/dbus-1/system-services/`
 - 注册 `clad` 为 systemd 服务
+- 安装 `c(1)` 和 `clad(8)` man pages
 - 写入默认配置到 `/etc/cli-assistant/config.toml`
 
 ```bash
@@ -116,9 +120,14 @@ enabled = true
 
 [logging]
 level = "INFO"
+
+[logging.audit]
+enabled = true
 ```
 
 API key 也可通过环境变量 `CL_API_KEY` 设置（优先级高于配置文件）。
+daemon 也会搜索 `$XDG_CONFIG_DIRS/command-line-assistant/config.toml` 路径，
+且 `/etc/cli-assistant/config.toml` 优先级最高。
 
 ## 使用方法
 
@@ -126,6 +135,7 @@ API key 也可通过环境变量 `CL_API_KEY` 设置（优先级高于配置文�
 c "问题"                            # 提问（默认使用 chat 子命令）
 c chat "问题"                       # 同上
 c chat --interactive                # 进入交互对话模式
+c chat --tui                        # 进入全屏 TUI 对话模式
 c chat -a /path/to/file "解释这个"   # 附加文件作为上下文
 c history --all                     # 查看所有历史记录
 c history --filter "关键词"          # 搜索历史记录

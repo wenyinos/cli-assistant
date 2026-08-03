@@ -2,12 +2,11 @@
 
 use zbus::Connection;
 
-use cla_dbus::constants::{
-    CHAT_BUS_NAME, CHAT_OBJECT_PATH, HISTORY_OBJECT_PATH, USER_OBJECT_PATH,
-};
+use cla_dbus::constants::{CHAT_BUS_NAME, CHAT_OBJECT_PATH, HISTORY_OBJECT_PATH, USER_OBJECT_PATH};
 use cla_dbus::structures::{ChatList, HistoryList, Question, Response};
 
 /// Client that communicates with the clad daemon over D-Bus.
+#[derive(Clone)]
 pub struct DbusClient {
     connection: Connection,
 }
@@ -38,7 +37,7 @@ impl DbusClient {
     pub async fn ask_question(
         &self,
         user_id: &str,
-        question: Question,
+        question: &Question,
     ) -> anyhow::Result<Response> {
         let reply = self
             .connection

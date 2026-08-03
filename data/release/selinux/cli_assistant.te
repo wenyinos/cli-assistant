@@ -1,0 +1,73 @@
+policy_module(cli_assistant, 0.8.0)
+
+########################################
+#
+# Declarations
+#
+
+type cli_assistant_t;
+type cli_assistant_exec_t;
+init_daemon_domain(cli_assistant_t, cli_assistant_exec_t)
+
+domain_type(cli_assistant_t)
+domain_entry_file(cli_assistant_t, cli_assistant_exec_t)
+role system_r types cli_assistant_t;
+
+type cli_assistant_etc_rw_t;
+files_config_file(cli_assistant_etc_rw_t)
+
+type cli_assistant_var_lib_rw_t;
+files_type(cli_assistant_var_lib_rw_t)
+
+########################################
+#
+# cli-assistant local policy
+#
+
+allow cli_assistant_t self:fifo_file rw_fifo_file_perms;
+
+# Network access
+allow cli_assistant_t self:unix_stream_socket create_stream_socket_perms;
+allow cli_assistant_t self:tcp_socket create_stream_socket_perms;
+
+# Network interfaces and nodes
+corenet_tcp_sendrecv_generic_if(cli_assistant_t)
+corenet_tcp_sendrecv_generic_node(cli_assistant_t)
+corenet_tcp_bind_generic_node(cli_assistant_t)
+
+# Allow outbound HTTP(S), including proxies
+corenet_tcp_connect_all_ports(cli_assistant_t)
+corenet_tcp_connect_http_cache_port(cli_assistant_t)
+corenet_tcp_connect_squid_port(cli_assistant_t)
+
+# D-Bus permissions
+dbus_system_bus_client(cli_assistant_t)
+dbus_connect_system_bus(cli_assistant_t)
+allow cli_assistant_t self:dbus send_msg;
+
+# Config directory
+manage_dirs_pattern(cli_assistant_t, cli_assistant_etc_rw_t, cli_assistant_etc_rw_t)
+manage_files_pattern(cli_assistant_t, cli_assistant_etc_rw_t, cli_assistant_etc_rw_t)
+manage_lnk_files_pattern(cli_assistant_t, cli_assistant_etc_rw_t, cli_assistant_etc_rw_t)
+
+# Data directory
+manage_dirs_pattern(
+    cli_assistant_t,
+    cli_assistant_var_lib_rw_t,
+    cli_assistant_var_lib_rw_t,
+)
+manage_files_pattern(
+    cli_assistant_t,
+    cli_assistant_var_lib_rw_t,
+    cli_assistant_var_lib_rw_t,
+)
+files_var_lib_filetrans(cli_assistant_t, cli_assistant_var_lib_rw_t, { dir file })
+
+# System access
+auth_use_nsswitch(cli_assistant_t)
+logging_send_syslog_msg(cli_assistant_t)
+miscfiles_read_localization(cli_assistant_t)
+files_read_etc_files(cli_assistant_t)
+auth_read_passwd(cli_assistant_t)
+corecmd_exec_bin(cli_assistant_t)
+domain_use_interactive_fds(cli_assistant_t)

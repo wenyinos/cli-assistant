@@ -6,15 +6,17 @@ use std::sync::Arc;
 
 use tracing::{error, info};
 use zbus::fdo;
+use zbus::message::Header;
+use zbus::Connection;
 
-use cla_common::Config;
+use cla_common::{Config, UserSessionManager};
 use cla_dbus::structures::{Question, Response};
 use cla_dbus::ClaDbusError;
 
+use crate::authorization;
 use crate::database::manager::DatabaseManager;
 use crate::database::repository::ChatRepository;
 use crate::http::query;
-use crate::user_interface::UserSessionManager;
 
 /// Stateful handle behind the `com.redhat.lightspeed.chat` D-Bus interface.
 pub struct ChatInterface {
@@ -28,7 +30,8 @@ impl ChatInterface {
     pub async fn new(config: Arc<Config>) -> anyhow::Result<Self> {
         let db_manager = DatabaseManager::new(&config).await?;
         let chat_repo = ChatRepository::new(db_manager.clone());
-        let session_manager = UserSessionManager::new();
+        let session_manager = UserSessionManager::new()
+            .map_err(|e| anyhow::anyhow!("failed to initialize session manager: {}", e))?;
 
         Ok(Self {
             chat_repo,
@@ -70,10 +73,20 @@ impl ChatInterface {
     /// Submit a question to the LLM backend and return the answer.
     async fn ask_question(
         &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
         user_id: &str,
         message_input: Question,
     ) -> fdo::Result<Response> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("AskQuestion from user={}", user_id);
+        crate::audit::event(
+            self.config.logging.audit.enabled,
+            "AskQuestion",
+            user_id,
+            None,
+        );
 
         let user_message = Self::compose_user_message(&message_input);
 
@@ -89,8 +102,12 @@ impl ChatInterface {
     /// List all chats for a user.
     async fn get_all_chat_from_user(
         &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
         user_id: &str,
     ) -> fdo::Result<cla_dbus::structures::ChatList> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("GetAllChatFromUser for user={}", user_id);
         let models = self
             .chat_repo
@@ -114,7 +131,14 @@ impl ChatInterface {
     }
 
     /// Delete all chats for a user.
-    async fn delete_all_chat_for_user(&self, user_id: &str) -> fdo::Result<()> {
+    async fn delete_all_chat_for_user(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
+        user_id: &str,
+    ) -> fdo::Result<()> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("DeleteAllChatForUser for user={}", user_id);
         self.chat_repo
             .soft_delete_all(user_id)
@@ -123,7 +147,15 @@ impl ChatInterface {
     }
 
     /// Delete a specific chat by name.
-    async fn delete_chat_for_user(&self, user_id: &str, name: &str) -> fdo::Result<()> {
+    async fn delete_chat_for_user(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
+        user_id: &str,
+        name: &str,
+    ) -> fdo::Result<()> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("DeleteChatForUser for user={}, chat={}", user_id, name);
         let chat = self
             .chat_repo
@@ -142,7 +174,14 @@ impl ChatInterface {
     }
 
     /// Get the latest chat name for a user.
-    async fn get_latest_chat_from_user(&self, user_id: &str) -> fdo::Result<String> {
+    async fn get_latest_chat_from_user(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
+        user_id: &str,
+    ) -> fdo::Result<String> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("GetLatestChatFromUser for user={}", user_id);
         let chat = self
             .chat_repo
@@ -157,7 +196,15 @@ impl ChatInterface {
     }
 
     /// Check if a chat is available.
-    async fn is_chat_available(&self, user_id: &str, name: &str) -> fdo::Result<bool> {
+    async fn is_chat_available(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
+        user_id: &str,
+        name: &str,
+    ) -> fdo::Result<bool> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("IsChatAvailable for user={}, chat={}", user_id, name);
         let chat = self
             .chat_repo
@@ -169,7 +216,15 @@ impl ChatInterface {
     }
 
     /// Get chat ID by name.
-    async fn get_chat_id(&self, user_id: &str, name: &str) -> fdo::Result<String> {
+    async fn get_chat_id(
+        &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
+        user_id: &str,
+        name: &str,
+    ) -> fdo::Result<String> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("GetChatId for user={}, chat={}", user_id, name);
         let chat = self
             .chat_repo
@@ -186,11 +241,21 @@ impl ChatInterface {
     /// Create a new chat and return its ID.
     async fn create_chat(
         &self,
+        #[zbus(connection)] conn: &Connection,
+        #[zbus(header)] header: Header<'_>,
         user_id: &str,
         name: &str,
         description: &str,
     ) -> fdo::Result<String> {
+        authorization::authorize_internal_user(conn, &header, user_id, &self.session_manager)
+            .await?;
         info!("CreateChat for user={}, name={}", user_id, name);
+        crate::audit::event(
+            self.config.logging.audit.enabled,
+            "CreateChat",
+            user_id,
+            None,
+        );
         let chat = self
             .chat_repo
             .insert(user_id, name, Some(description))

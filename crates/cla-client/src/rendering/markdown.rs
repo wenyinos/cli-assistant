@@ -22,7 +22,11 @@ pub fn markdown_to_ansi(text: &str, theme: &Theme, plain: bool) -> String {
         if line.trim_start().starts_with("```") {
             if in_code_block {
                 // End of code block
-                output.push_str(&render_code_block(&code_block_lines, &code_block_lang, theme));
+                output.push_str(&render_code_block(
+                    &code_block_lines,
+                    &code_block_lang,
+                    theme,
+                ));
                 code_block_lines.clear();
                 code_block_lang.clear();
                 in_code_block = false;
@@ -41,16 +45,16 @@ pub fn markdown_to_ansi(text: &str, theme: &Theme, plain: bool) -> String {
         }
 
         // Headers
-        if line.starts_with("# ") {
-            output.push_str(&colorize(&format!("\n{}\n", &line[2..]), theme.header));
+        if let Some(stripped) = line.strip_prefix("# ") {
+            output.push_str(&colorize(&format!("\n{}\n", stripped), theme.header));
             continue;
         }
-        if line.starts_with("## ") {
-            output.push_str(&colorize(&format!("\n{}\n", &line[3..]), theme.header));
+        if let Some(stripped) = line.strip_prefix("## ") {
+            output.push_str(&colorize(&format!("\n{}\n", stripped), theme.header));
             continue;
         }
-        if line.starts_with("### ") {
-            output.push_str(&colorize(&format!("\n{}\n", &line[4..]), theme.header));
+        if let Some(stripped) = line.strip_prefix("### ") {
+            output.push_str(&colorize(&format!("\n{}\n", stripped), theme.header));
             continue;
         }
 
@@ -75,8 +79,8 @@ pub fn markdown_to_ansi(text: &str, theme: &Theme, plain: bool) -> String {
         }
 
         // Blockquote
-        if line.starts_with("> ") {
-            output.push_str(&format!("│ {}\n", render_inline(&line[2..], theme)));
+        if let Some(stripped) = line.strip_prefix("> ") {
+            output.push_str(&format!("│ {}\n", render_inline(stripped, theme)));
             continue;
         }
 
@@ -87,7 +91,11 @@ pub fn markdown_to_ansi(text: &str, theme: &Theme, plain: bool) -> String {
 
     // Handle unclosed code block
     if in_code_block && !code_block_lines.is_empty() {
-        output.push_str(&render_code_block(&code_block_lines, &code_block_lang, theme));
+        output.push_str(&render_code_block(
+            &code_block_lines,
+            &code_block_lang,
+            theme,
+        ));
     }
 
     output
@@ -102,7 +110,12 @@ fn render_inline(text: &str, theme: &Theme) -> String {
         if let Some(end) = result[start + 1..].find('`') {
             let code = &result[start + 1..start + 1 + end];
             let replacement = colorize(code, theme.inline_code);
-            result = format!("{}{}{}", &result[..start], replacement, &result[start + 2 + end..]);
+            result = format!(
+                "{}{}{}",
+                &result[..start],
+                replacement,
+                &result[start + 2 + end..]
+            );
         } else {
             break;
         }
@@ -113,7 +126,12 @@ fn render_inline(text: &str, theme: &Theme) -> String {
         if let Some(end) = result[start + 2..].find("**") {
             let inner = &result[start + 2..start + 2 + end];
             let replacement = stylize(inner, Style::Bold);
-            result = format!("{}{}{}", &result[..start], replacement, &result[start + 4 + end..]);
+            result = format!(
+                "{}{}{}",
+                &result[..start],
+                replacement,
+                &result[start + 4 + end..]
+            );
         } else {
             break;
         }
@@ -127,7 +145,12 @@ fn render_inline(text: &str, theme: &Theme) -> String {
         if let Some(end) = result[start + 1..].find('*') {
             let inner = &result[start + 1..start + 1 + end];
             let replacement = stylize(inner, Style::Italic);
-            result = format!("{}{}{}", &result[..start], replacement, &result[start + 2 + end..]);
+            result = format!(
+                "{}{}{}",
+                &result[..start],
+                replacement,
+                &result[start + 2 + end..]
+            );
         } else {
             break;
         }
@@ -168,7 +191,10 @@ fn render_code_block(lines: &[String], lang: &str, theme: &Theme) -> String {
 
     // Header border
     if lang.is_empty() {
-        output.push_str(&colorize(&format!("┌{}┐", "─".repeat(max_width + 2)), theme.code_block_border));
+        output.push_str(&colorize(
+            &format!("┌{}┐", "─".repeat(max_width + 2)),
+            theme.code_block_border,
+        ));
     } else {
         let lang_label = format!(" {} ", lang);
         let remaining = max_width.saturating_sub(lang_label.len()) + 2;
@@ -190,7 +216,10 @@ fn render_code_block(lines: &[String], lang: &str, theme: &Theme) -> String {
     }
 
     // Footer border
-    output.push_str(&colorize(&format!("└{}┘", "─".repeat(max_width + 2)), theme.code_block_border));
+    output.push_str(&colorize(
+        &format!("└{}┘", "─".repeat(max_width + 2)),
+        theme.code_block_border,
+    ));
     output.push('\n');
 
     output
@@ -210,4 +239,45 @@ fn strip_ordered_list_prefix(line: &str) -> Option<&str> {
         return None;
     }
     Some(&trimmed[trimmed.len() - chars.as_str().len()..])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_output_preserves_markdown_text() {
+        let theme = Theme::default();
+        let input = "# Title\n\n**bold** and `code`";
+        assert_eq!(markdown_to_ansi(input, &theme, true), input);
+    }
+
+    #[test]
+    fn renders_common_markdown_blocks() {
+        let theme = Theme::default();
+        let input =
+            "# Title\n- item\n> quote\n\n```rust\nfn main() {}\n```\n\n[link](https://example.com)";
+        let output = markdown_to_ansi(input, &theme, false);
+
+        assert!(output.contains("Title"));
+        assert!(output.contains("• item"));
+        assert!(output.contains("│ quote"));
+        assert!(output.contains("┌"));
+        assert!(output.contains("fn main() {}"));
+        assert!(output.contains("https://example.com"));
+    }
+
+    #[test]
+    fn renders_inline_links_and_code() {
+        let theme = Theme::default();
+        let output = markdown_to_ansi(
+            "`inline` and [docs](https://docs.example.com)",
+            &theme,
+            false,
+        );
+
+        assert!(output.contains("inline"));
+        assert!(output.contains("docs"));
+        assert!(output.contains("https://docs.example.com"));
+    }
 }

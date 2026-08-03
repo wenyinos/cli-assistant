@@ -1,0 +1,6 @@
+/etc/cli-assistant(/.*)?                    gen_context(system_u:object_r:cli_assistant_etc_rw_t,s0)
+/etc/xdg/command-line-assistant(/.*)?       gen_context(system_u:object_r:cli_assistant_etc_rw_t,s0)
+
+/usr/local/bin/clad                         -- gen_context(system_u:object_r:cli_assistant_exec_t,s0)
+
+/var/lib/cli-assistant(/.*)?                gen_context(system_u:object_r:cli_assistant_var_lib_rw_t,s0)

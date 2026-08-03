@@ -22,8 +22,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/cli-assistant"
 DBUS_DIR="/etc/dbus-1/system.d"
+DBUS_ACTIVATION_DIR="/usr/share/dbus-1/system-services"
 SYSTEMD_DIR="/etc/systemd/system"
 DATA_DIR="/var/lib/cli-assistant"
+MAN1_DIR="/usr/local/share/man/man1"
+MAN8_DIR="/usr/local/share/man/man8"
 
 # ── Install binaries ─────────────────────────────────────────────────────────
 info "Installing binaries to ${BIN_DIR} ..."
@@ -52,6 +55,21 @@ if systemctl is-active --quiet dbus; then
     info "D-Bus daemon reloaded."
 fi
 
+# ── Install D-Bus activation services ────────────────────────────────────────
+info "Installing D-Bus activation services to ${DBUS_ACTIVATION_DIR} ..."
+mkdir -p "${DBUS_ACTIVATION_DIR}"
+install -m 0644 "${SCRIPT_DIR}/config/com.redhat.lightspeed.chat.service" \
+    "${DBUS_ACTIVATION_DIR}/com.redhat.lightspeed.chat.service"
+install -m 0644 "${SCRIPT_DIR}/config/com.redhat.lightspeed.history.service" \
+    "${DBUS_ACTIVATION_DIR}/com.redhat.lightspeed.history.service"
+install -m 0644 "${SCRIPT_DIR}/config/com.redhat.lightspeed.user.service" \
+    "${DBUS_ACTIVATION_DIR}/com.redhat.lightspeed.user.service"
+
+if systemctl is-active --quiet dbus; then
+    systemctl reload dbus 2>/dev/null || true
+    info "D-Bus activation services loaded."
+fi
+
 # ── Install systemd service ──────────────────────────────────────────────────
 info "Installing systemd service to ${SYSTEMD_DIR} ..."
 install -m 0644 "${SCRIPT_DIR}/config/clad.service" "${SYSTEMD_DIR}/clad.service"
@@ -61,6 +79,12 @@ systemctl daemon-reload
 # Create data directory for SQLite
 mkdir -p "${DATA_DIR}"
 chmod 0700 "${DATA_DIR}"
+
+# ── Install man pages ────────────────────────────────────────────────────────
+info "Installing man pages ..."
+install -d "${MAN1_DIR}" "${MAN8_DIR}"
+install -m 0644 "${SCRIPT_DIR}/data/release/man/c.1" "${MAN1_DIR}/c.1"
+install -m 0644 "${SCRIPT_DIR}/data/release/man/clad.8" "${MAN8_DIR}/clad.8"
 
 # ── Enable & start service ───────────────────────────────────────────────────
 info "Enabling and starting clad.service ..."
@@ -80,6 +104,8 @@ echo ""
 echo "  Config:     ${CONFIG_DIR}/config.toml"
 echo "  Binaries:   ${BIN_DIR}/c  and  ${BIN_DIR}/clad"
 echo "  Database:   ${DATA_DIR}/cla.db"
+echo "  Man pages:  ${MAN1_DIR}/c.1  and  ${MAN8_DIR}/clad.8"
+echo "  D-Bus:      ${DBUS_ACTIVATION_DIR}/com.redhat.lightspeed.*.service"
 echo "  Service:    systemctl status clad"
 echo ""
 echo "  Quick test: c \"Hello, world!\""

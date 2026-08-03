@@ -1,7 +1,7 @@
 //! User session management.
 //!
 //! Maps to Python `daemon/session.py`. Derives a deterministic user ID from the
-//! system machine-id and the effective Unix user ID using UUID v5.
+//! system machine-id UUID and the effective Unix user ID using UUID v5.
 
 use std::path::Path;
 
@@ -10,16 +10,10 @@ use uuid::Uuid;
 use crate::constants::MACHINE_ID_PATH;
 use crate::errors::{ClaError, Result};
 
-/// Namespace UUID used for UUID v5 generation.
-///
-/// This is a fixed namespace (DNS) so that `machine_id + euid` always maps to
-/// the same UUID deterministically.
-const UUID_NAMESPACE: Uuid = Uuid::NAMESPACE_DNS;
-
 /// Manages user session identity.
 ///
 /// Each session is uniquely identified by a UUID v5 derived from:
-/// - The system machine-id (`/etc/machine-id`)
+/// - The system machine-id (`/etc/machine-id`) parsed as a UUID namespace
 /// - The effective Unix user ID
 #[derive(Debug, Clone)]
 pub struct UserSessionManager {
@@ -38,9 +32,19 @@ impl UserSessionManager {
 
     /// Creates a session manager with an explicit machine-id UUID.
     ///
-    /// Useful for testing or when the machine-id is provided externally.
+    /// The value is the machine-id UUID namespace used by the upstream
+    /// Python implementation.
     pub fn with_machine_id(machine_id: Uuid) -> Self {
         Self { machine_id }
+    }
+
+    /// Creates a session manager from the raw machine-id string.
+    ///
+    /// This mirrors the upstream Python implementation: the raw machine-id
+    /// string is parsed as a UUID and used as the namespace for per-user IDs.
+    pub fn from_raw_machine_id(raw_machine_id: &str) -> Result<Self> {
+        let machine_id = Self::parse_machine_id(raw_machine_id)?;
+        Ok(Self { machine_id })
     }
 
     /// Returns the system machine-id as a UUID.
@@ -50,11 +54,10 @@ impl UserSessionManager {
 
     /// Generates a deterministic user ID from the effective Unix user ID.
     ///
-    /// Uses UUID v5 with the machine-id as namespace and the euid as name.
+    /// Uses UUID v5 with the machine-id namespace and the euid as name.
     /// The same `(machine_id, euid)` pair always produces the same UUID.
     pub fn get_user_id(&self, effective_user_id: u32) -> String {
-        let name = format!("{}:{}", self.machine_id, effective_user_id);
-        Uuid::new_v5(&UUID_NAMESPACE, name.as_bytes()).to_string()
+        Uuid::new_v5(&self.machine_id, effective_user_id.to_string().as_bytes()).to_string()
     }
 
     /// Reads and parses the machine-id from the system file.
@@ -72,8 +75,14 @@ impl UserSessionManager {
             return Err(ClaError::session("machine-id file is empty"));
         }
 
-        // /etc/machine-id is a 32-char hex string (no dashes).
-        // Pad it into UUID format: 8-4-4-4-12
+        Self::parse_machine_id(trimmed)
+    }
+
+    /// Parse a machine-id string into a UUID.
+    ///
+    /// `/etc/machine-id` is normally a 32-char hex string without dashes, so
+    /// normalize it to the standard UUID representation before parsing.
+    fn parse_machine_id(trimmed: &str) -> Result<Uuid> {
         let uuid_str = if trimmed.len() == 32 && !trimmed.contains('-') {
             format!(
                 "{}-{}-{}-{}-{}",
@@ -88,10 +97,7 @@ impl UserSessionManager {
         };
 
         Uuid::parse_str(&uuid_str).map_err(|e| {
-            ClaError::session_with_source(
-                format!("invalid machine-id format: {}", trimmed),
-                e,
-            )
+            ClaError::session_with_source(format!("invalid machine-id format: {}", trimmed), e)
         })
     }
 }
@@ -137,6 +143,16 @@ mod tests {
         let mgr = UserSessionManager::with_machine_id(mid);
         let uid = mgr.get_user_id(1000);
         assert!(Uuid::parse_str(&uid).is_ok());
+    }
+
+    #[test]
+    fn user_id_matches_upstream_implementation() {
+        let mgr = UserSessionManager::from_raw_machine_id("09e28913cb074ed995a239c93b07fd8a")
+            .expect("valid machine id");
+        assert_eq!(
+            mgr.get_user_id(1000),
+            "4d465f1c-0507-5dfa-9ea0-e2de1a9e90a5"
+        );
     }
 
     #[test]

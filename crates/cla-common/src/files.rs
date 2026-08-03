@@ -103,7 +103,7 @@ impl NamedFileLock {
     /// The lock file is created under the XDG state directory. The `name` is
     /// sanitized to replace path separators with underscores.
     pub fn new(name: &str) -> Result<Self> {
-        let safe_name = name.replace('/', "_").replace('\\', "_");
+        let safe_name = name.replace(['/', '\\'], "_");
         let lock_dir = get_xdg_state_path().join("locks");
         create_folder(&lock_dir, true, 0o700)?;
 
@@ -111,6 +111,7 @@ impl NamedFileLock {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .mode(0o600)
             .open(&path)
             .map_err(|e| ClaError::io(Some(path.clone()), e))?;
@@ -135,9 +136,9 @@ impl NamedFileLock {
     /// After acquiring the lock, the current process PID is written to the lock
     /// file for diagnostics.
     pub fn acquire(&self) -> Result<()> {
-        self.file.lock_exclusive().map_err(|e| {
-            ClaError::io(Some(self.path.clone()), e)
-        })?;
+        self.file
+            .lock_exclusive()
+            .map_err(|e| ClaError::io(Some(self.path.clone()), e))?;
 
         // Write PID for diagnostics
         let pid = std::process::id().to_string();
@@ -151,9 +152,9 @@ impl NamedFileLock {
     /// Releases the lock and clears the PID from the lock file.
     pub fn release(&self) -> Result<()> {
         let _ = std::fs::write(&self.path, b"");
-        self.file.unlock().map_err(|e| {
-            ClaError::io(Some(self.path.clone()), e)
-        })?;
+        self.file
+            .unlock()
+            .map_err(|e| ClaError::io(Some(self.path.clone()), e))?;
         tracing::debug!("Released lock {:?}", self.path);
         Ok(())
     }
@@ -192,18 +193,9 @@ mod tests {
 
     #[test]
     fn guess_mimetype_known_types() {
-        assert_eq!(
-            guess_mimetype(Path::new("image.png")),
-            "image/png"
-        );
-        assert_eq!(
-            guess_mimetype(Path::new("readme.txt")),
-            "text/plain"
-        );
-        assert_eq!(
-            guess_mimetype(Path::new("data.json")),
-            "application/json"
-        );
+        assert_eq!(guess_mimetype(Path::new("image.png")), "image/png");
+        assert_eq!(guess_mimetype(Path::new("readme.txt")), "text/plain");
+        assert_eq!(guess_mimetype(Path::new("data.json")), "application/json");
     }
 
     #[test]
@@ -220,10 +212,11 @@ mod tests {
         assert!(!lock.is_locked());
 
         lock.acquire().unwrap();
-        assert!(lock.is_locked());
+        let observer = NamedFileLock::new("cla_test_lock").unwrap();
+        assert!(observer.is_locked());
 
         lock.release().unwrap();
-        assert!(!lock.is_locked());
+        assert!(!observer.is_locked());
     }
 
     #[test]

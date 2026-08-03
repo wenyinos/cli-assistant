@@ -28,6 +28,6 @@ pub mod system;
 pub use config::AppConfig;
 /// Convenience alias — the rest of the codebase uses `Config`.
 pub type Config = AppConfig;
+pub use constants::VERSION;
 pub use errors::{ClaError, Result};
 pub use session::UserSessionManager;
-pub use constants::VERSION;

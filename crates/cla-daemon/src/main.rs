@@ -1,5 +1,7 @@
 //! clad – D-Bus daemon for the Command Line Assistant.
 
+mod audit;
+mod authorization;
 mod chat_interface;
 mod database;
 mod dbus_server;
