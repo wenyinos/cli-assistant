@@ -4,7 +4,7 @@
 %global modulename cli_assistant
 
 Name:           cli-assistant
-Version:        0.8.1
+Version:        0.8.2
 Release:        1%{?dist}
 Summary:        Command Line Assistant client and daemon
 
@@ -118,6 +118,10 @@ fi
 %attr(0600, root, root) %{_datadir}/selinux/packages/%{selinuxtype}/%{modulename}.pp.bz2
 
 %changelog
+* Mon Aug 03 2026 cli-assistant contributors - 0.8.2-1
+- Harden install/uninstall scripts: systemd check, RPM ownership detection,
+  overridable paths.
+
 * Mon Aug 03 2026 cli-assistant contributors - 0.8.1-1
 - Load config exclusively from /etc/cli-assistant/config.toml (no XDG lookup).
 - Align RPM install paths with the tarball installer.
