@@ -17,16 +17,22 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── systemd check ─────────────────────────────────────────────────────────────
+if ! command -v systemctl >/dev/null 2>&1 || [[ ! -d /run/systemd/system ]]; then
+    error "This system does not use systemd; cli-assistant cannot be installed by this script."
+    exit 1
+fi
+
+# ── Paths (override each via environment, e.g. CLA_PREFIX) ───────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_DIR="/usr/local/bin"
-CONFIG_DIR="/etc/cli-assistant"
-DBUS_DIR="/etc/dbus-1/system.d"
-DBUS_ACTIVATION_DIR="/usr/share/dbus-1/system-services"
-SYSTEMD_DIR="/etc/systemd/system"
-DATA_DIR="/var/lib/cli-assistant"
-MAN1_DIR="/usr/local/share/man/man1"
-MAN8_DIR="/usr/local/share/man/man8"
+BIN_DIR="${CLA_BIN_DIR:-/usr/local/bin}"
+CONFIG_DIR="${CLA_CONFIG_DIR:-/etc/cli-assistant}"
+DBUS_DIR="${CLA_DBUS_DIR:-/etc/dbus-1/system.d}"
+DBUS_ACTIVATION_DIR="${CLA_DBUS_ACTIVATION_DIR:-/usr/share/dbus-1/system-services}"
+SYSTEMD_DIR="${CLA_SYSTEMD_DIR:-/etc/systemd/system}"
+DATA_DIR="${CLA_DATA_DIR:-/var/lib/cli-assistant}"
+MAN1_DIR="${CLA_MAN1_DIR:-/usr/local/share/man/man1}"
+MAN8_DIR="${CLA_MAN8_DIR:-/usr/local/share/man/man8}"
 
 # ── Install binaries ─────────────────────────────────────────────────────────
 info "Installing binaries to ${BIN_DIR} ..."

@@ -15,6 +15,34 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# ── systemd check ─────────────────────────────────────────────────────────────
+if ! command -v systemctl >/dev/null 2>&1 || [[ ! -d /run/systemd/system ]]; then
+    error "This system does not use systemd. Remove cli-assistant with your distribution's package manager."
+    exit 1
+fi
+
+# ── RPM detection ─────────────────────────────────────────────────────────────
+# This script only removes a manually installed (tarball) copy. If the package
+# manager owns cli-assistant, delegate to it so the rpm database stays in sync.
+if command -v rpm >/dev/null 2>&1; then
+    if rpm -q cli-assistant &>/dev/null || rpm -q cli-assistant-selinux &>/dev/null; then
+        error "cli-assistant is installed via RPM packages. Remove them with:"
+        error "    sudo dnf remove cli-assistant cli-assistant-selinux"
+        error "This script only handles a manual (tarball) install."
+        exit 1
+    fi
+fi
+
+# ── Paths (override each via environment) ────────────────────────────────────
+BIN_DIR="${CLA_BIN_DIR:-/usr/local/bin}"
+CONFIG_DIR="${CLA_CONFIG_DIR:-/etc/cli-assistant}"
+DBUS_DIR="${CLA_DBUS_DIR:-/etc/dbus-1/system.d}"
+DBUS_ACTIVATION_DIR="${CLA_DBUS_ACTIVATION_DIR:-/usr/share/dbus-1/system-services}"
+SYSTEMD_DIR="${CLA_SYSTEMD_DIR:-/etc/systemd/system}"
+DATA_DIR="${CLA_DATA_DIR:-/var/lib/cli-assistant}"
+MAN1_DIR="${CLA_MAN1_DIR:-/usr/local/share/man/man1}"
+MAN8_DIR="${CLA_MAN8_DIR:-/usr/local/share/man/man8}"
+
 echo ""
 warn "This will remove cli-assistant from your system."
 read -rp "Continue? [y/N] " confirm
@@ -23,46 +51,50 @@ if [[ "$confirm" != [yY] ]]; then
     exit 0
 fi
 
-# Stop & disable service
-if systemctl is-active --quiet clad 2>/dev/null; then
-    info "Stopping clad.service ..."
-    systemctl stop clad
-fi
-if systemctl is-enabled --quiet clad 2>/dev/null; then
-    info "Disabling clad.service ..."
-    systemctl disable clad
-fi
+# ── Stop & disable service ───────────────────────────────────────────────────
+info "Stopping clad.service ..."
+systemctl stop clad 2>/dev/null || true
+systemctl disable clad 2>/dev/null || true
 
-# Remove files
+# ── Remove a file, skipping anything owned by an installed RPM package ───────
+remove_file() {
+    local path="$1"
+    [[ -e "$path" ]] || return
+    if local owner; owner="$(rpm -qf "$path" 2>/dev/null)"; then
+        warn "Skipping ${path}: owned by RPM package ${owner}."
+        return
+    fi
+    rm -f "$path"
+}
+
 info "Removing binaries ..."
-rm -f /usr/local/bin/c /usr/local/bin/clad
+remove_file "${BIN_DIR}/c"
+remove_file "${BIN_DIR}/clad"
 
 info "Removing man pages ..."
-rm -f /usr/local/share/man/man1/c.1
-rm -f /usr/local/share/man/man8/clad.8
+remove_file "${MAN1_DIR}/c.1"
+remove_file "${MAN8_DIR}/clad.8"
 
 info "Removing systemd service ..."
-rm -f /etc/systemd/system/clad.service
-systemctl daemon-reload
+remove_file "${SYSTEMD_DIR}/clad.service"
+systemctl daemon-reload 2>/dev/null || true
 
 info "Removing D-Bus policy ..."
-rm -f /etc/dbus-1/system.d/com.cli-assistant.conf
+remove_file "${DBUS_DIR}/com.cli-assistant.conf"
 
 info "Removing D-Bus activation services ..."
-rm -f /usr/share/dbus-1/system-services/com.redhat.lightspeed.chat.service
-rm -f /usr/share/dbus-1/system-services/com.redhat.lightspeed.history.service
-rm -f /usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service
+remove_file "${DBUS_ACTIVATION_DIR}/com.redhat.lightspeed.chat.service"
+remove_file "${DBUS_ACTIVATION_DIR}/com.redhat.lightspeed.history.service"
+remove_file "${DBUS_ACTIVATION_DIR}/com.redhat.lightspeed.user.service"
 
-if systemctl is-active --quiet dbus; then
-    systemctl reload dbus 2>/dev/null || true
-fi
+systemctl reload dbus 2>/dev/null || true
 
 echo ""
 info "Uninstallation complete."
 echo ""
-echo "  Config preserved: /etc/cli-assistant/config.toml"
-echo "  Data preserved:   /var/lib/cli-assistant/"
+echo "  Config preserved: ${CONFIG_DIR}/config.toml"
+echo "  Data preserved:   ${DATA_DIR}/"
 echo ""
 echo "  To remove all data:"
-echo "    sudo rm -rf /etc/cli-assistant /var/lib/cli-assistant"
+echo "    sudo rm -rf ${CONFIG_DIR} ${DATA_DIR}"
 echo ""
