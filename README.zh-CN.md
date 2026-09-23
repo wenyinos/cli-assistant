@@ -27,10 +27,10 @@
 |---|---|---|
 | Fedora / RHEL | `.rpm` | `sudo dnf install ./cli-assistant-*.rpm` |
 | Debian / Ubuntu | `.deb` | `sudo apt install ./cli-assistant_*.deb` |
-| Arch Linux | `packaging/PKGBUILD` | `cd packaging && makepkg -s` |
+| Arch Linux | `.pkg.tar.zst` | `sudo pacman -U ./cli-assistant-*.pkg.tar.zst` |
 
-RPM 与 DEB 由 CI 构建；Arch Linux（含 Arch Linux ARM）按该生态惯例用
-PKGBUILD 本地构建。
+RPM 与 DEB 提供 x86_64/amd64 和 aarch64/arm64 两种架构；pacman 包由 CI 构建
+x86_64 版本（Arch Linux ARM 用 `packaging/PKGBUILD` 本地构建 aarch64）。
 
 从本仓库自行构建软件包：
 

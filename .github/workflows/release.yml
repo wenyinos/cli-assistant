@@ -111,9 +111,49 @@ jobs:
           name: cli-assistant-deb-${{ matrix.arch }}
           path: ./*.deb
 
+  pacman:
+    name: Pacman (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Arch's official repositories and container images are x86_64-only;
+          # the PKGBUILD declares aarch64 as well, so Arch Linux ARM users can
+          # build the same package locally with makepkg.
+          - arch: x86_64
+            runner: ubuntu-latest
+
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm git rust
+
+      - uses: actions/checkout@v4
+
+      - name: Build the package
+        run: |
+          # makepkg refuses to run as root, so build as an unprivileged user
+          # with passwordless sudo (in case makepkg has to install deps).
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+          su builder -c 'cd "${GITHUB_WORKSPACE}/packaging" && makepkg -s --noconfirm'
+
+      - name: Collect pacman artifacts
+        run: |
+          # Exclude the -debug package; the number class skips it.
+          cp packaging/cli-assistant-[0-9]*.pkg.tar.* .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-assistant-pacman-${{ matrix.arch }}
+          path: ./cli-assistant-[0-9]*.pkg.tar.*
+
   release:
     name: Create Release
-    needs: [rpm, deb]
+    needs: [rpm, deb, pacman]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -124,7 +164,7 @@ jobs:
 
       - name: Generate checksums
         run: |
-          sha256sum *.rpm *.deb > checksums.txt
+          sha256sum *.rpm *.deb cli-assistant-[0-9]*.pkg.tar.zst > checksums.txt
           cat checksums.txt
 
       - name: Prepare release notes
@@ -142,12 +182,11 @@ jobs:
 
           | 架构 / Arch | Debian / Ubuntu | Fedora / RHEL | Arch Linux |
           |---|---|---|---|
-          | amd64 / x86-64 | [.deb](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant_@VERSION@_amd64.deb) | [.rpm](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1.x86_64.rpm) | [本地 `makepkg` 构建](https://github.com/@REPO@/tree/@TAG@/packaging) |
-          | arm64 / aarch64 | [.deb](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant_@VERSION@_arm64.deb) | [.rpm](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1.aarch64.rpm) | [本地 `makepkg` 构建](https://github.com/@REPO@/tree/@TAG@/packaging) |
+          | amd64 / x86-64 | [.deb](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant_@VERSION@_amd64.deb) | [.rpm](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1.x86_64.rpm) · [selinux](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-selinux-@VERSION@-1.x86_64.rpm) | [.pkg.tar.zst](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1-x86_64.pkg.tar.zst) |
+          | arm64 / aarch64 | [.deb](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant_@VERSION@_arm64.deb) | [.rpm](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1.aarch64.rpm) · [selinux](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-selinux-@VERSION@-1.aarch64.rpm) | 本地 `makepkg` 构建 |
 
-          Fedora / RHEL 另附 SELinux 策略子包 `cli-assistant-selinux`。Arch Linux 与
-          Arch Linux ARM 使用仓库中的 `packaging/PKGBUILD` 本地构建（Arch 惯例）：
-          `cd packaging && makepkg -s`。
+          Fedora / RHEL 的 `selinux` 为策略子包，与主包一同安装。Arch Linux ARM 使用
+          仓库中的 `packaging/PKGBUILD` 本地构建 aarch64 包：`cd packaging && makepkg -s`。
           EOF
           sed -i "s|@REPO@|${GITHUB_REPOSITORY}|g; s|@TAG@|${GITHUB_REF_NAME}|g; s|@VERSION@|${VERSION}|g" release-body.md
           cat release-body.md
@@ -160,4 +199,5 @@ jobs:
           files: |
             *.rpm
             *.deb
+            cli-assistant-[0-9]*.pkg.tar.zst
             checksums.txt

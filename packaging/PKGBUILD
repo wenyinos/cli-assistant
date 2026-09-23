@@ -7,7 +7,7 @@ pkgdesc="CLI assistant for Linux system administration (OpenAI-compatible backen
 arch=('x86_64' 'aarch64')
 url="https://github.com/wenyinos/cli-assistant"
 license=('MIT')
-depends=('gcc-libs' 'sqlite')
+depends=('gcc-libs')
 makedepends=('rust')
 install=cli-assistant.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/wenyinos/cli-assistant/archive/refs/tags/v$pkgver.tar.gz")
@@ -17,14 +17,15 @@ sha256sums=('SKIP')
 build() {
   cd "$pkgname-$pkgver"
 
-  # Use the system linker. Rust 1.90+ defaults to the bundled rust-lld, which
-  # in this environment fails to resolve the symbols of statically linked
-  # libraries (ring's assembly, sqlx's bundled SQLite).
-  export RUSTFLAGS="${RUSTFLAGS:-} -C linker=cc -C linker-features=-lld"
-
-  # Belt and braces: link the system SQLite as well. The bundled copy also
-  # failed to resolve its symbols here, and sqlite is a base package on Arch.
-  export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
+  # Arch's makepkg enables LTO in its default OPTIONS and injects -flto=auto
+  # into CFLAGS/CXXFLAGS/LDFLAGS. The C objects that sqlx's bundled SQLite and
+  # ring compile then carry LTO bitcode whose symbols the final rustc link
+  # cannot resolve ("undefined symbol: sqlite3_*", "ring_core_*"). Build
+  # without LTO.
+  export CFLAGS="${CFLAGS// -flto=auto/}"
+  export CXXFLAGS="${CXXFLAGS// -flto=auto/}"
+  export LDFLAGS="${LDFLAGS// -flto=auto/}"
+  export RUSTFLAGS="${RUSTFLAGS:-} -C lto=off"
 
   cargo build --release
 }
