@@ -138,7 +138,7 @@ jobs:
           核对 SHA256。The client and daemon ship in one package; run `sudo c setup`
           after installing.
 
-          **Linux**（Debian / Ubuntu 用 `.deb`，Fedora / RHEL 用 `.rpm`，Arch 用 `.pkg.tar.zst`）
+          **Linux**（Debian / Ubuntu 用 `.deb`，Fedora / RHEL 用 `.rpm`，Arch 用 PKGBUILD 本地构建）
 
           | 架构 / Arch | Debian / Ubuntu | Fedora / RHEL | Arch Linux |
           |---|---|---|---|
