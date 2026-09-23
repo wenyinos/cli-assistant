@@ -7,7 +7,7 @@ pkgdesc="CLI assistant for Linux system administration (OpenAI-compatible backen
 arch=('x86_64' 'aarch64')
 url="https://github.com/wenyinos/cli-assistant"
 license=('MIT')
-depends=('gcc-libs')
+depends=('gcc-libs' 'sqlite')
 makedepends=('rust')
 install=cli-assistant.install
 source=("$pkgname-$pkgver.tar.gz::https://github.com/wenyinos/cli-assistant/archive/refs/tags/v$pkgver.tar.gz")
@@ -16,6 +16,13 @@ sha256sums=('SKIP')
 
 build() {
   cd "$pkgname-$pkgver"
+
+  # Link against the system SQLite. The bundled copy fails to resolve its
+  # symbols under Arch's toolchain (rust-lld with makepkg's hardened
+  # CFLAGS/LDFLAGS); sqlite is a base package, so the runtime dependency is
+  # already satisfied on any Arch system.
+  export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
+
   cargo build --release
 }
 

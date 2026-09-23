@@ -128,14 +128,16 @@ jobs:
 
     steps:
       - name: Install build tools
-        run: pacman -Syu --noconfirm git sudo rust
+        run: pacman -Syu --noconfirm git pkgconf rust sqlite sudo
 
       - uses: actions/checkout@v4
 
       - name: Build the package
         run: |
-          # makepkg refuses to run as root, so build as an unprivileged user.
+          # makepkg refuses to run as root, so build as an unprivileged user
+          # with passwordless sudo (needed if makepkg has to install deps).
           useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
           chown -R builder:builder "${GITHUB_WORKSPACE}"
           su builder -c 'cd "${GITHUB_WORKSPACE}/packaging" && makepkg -s --noconfirm'
 
