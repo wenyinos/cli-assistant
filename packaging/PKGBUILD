@@ -17,10 +17,13 @@ sha256sums=('SKIP')
 build() {
   cd "$pkgname-$pkgver"
 
-  # Link against the system SQLite. The bundled copy fails to resolve its
-  # symbols under Arch's toolchain (rust-lld with makepkg's hardened
-  # CFLAGS/LDFLAGS); sqlite is a base package, so the runtime dependency is
-  # already satisfied on any Arch system.
+  # Use the system linker. Rust 1.90+ defaults to the bundled rust-lld, which
+  # in this environment fails to resolve the symbols of statically linked
+  # libraries (ring's assembly, sqlx's bundled SQLite).
+  export RUSTFLAGS="${RUSTFLAGS:-} -C linker=cc -C linker-features=-lld"
+
+  # Belt and braces: link the system SQLite as well. The bundled copy also
+  # failed to resolve its symbols here, and sqlite is a base package on Arch.
   export LIBSQLITE3_SYS_USE_PKG_CONFIG=1
 
   cargo build --release
