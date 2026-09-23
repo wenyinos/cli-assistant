@@ -27,7 +27,10 @@
 |---|---|---|
 | Fedora / RHEL | `.rpm` | `sudo dnf install ./cli-assistant-*.rpm` |
 | Debian / Ubuntu | `.deb` | `sudo apt install ./cli-assistant_*.deb` |
-| Arch Linux | `.pkg.tar.zst` | `sudo pacman -U ./cli-assistant-*.pkg.tar.zst` |
+| Arch Linux | `packaging/PKGBUILD` | `cd packaging && makepkg -s` |
+
+RPM 与 DEB 由 CI 构建；Arch Linux（含 Arch Linux ARM）按该生态惯例用
+PKGBUILD 本地构建。
 
 从本仓库自行构建软件包：
 

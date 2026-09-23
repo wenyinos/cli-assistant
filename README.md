@@ -28,7 +28,10 @@ Prebuilt packages for **x86_64** and **aarch64** are published on the
 |---|---|---|
 | Fedora / RHEL | `.rpm` | `sudo dnf install ./cli-assistant-*.rpm` |
 | Debian / Ubuntu | `.deb` | `sudo apt install ./cli-assistant_*.deb` |
-| Arch Linux | `.pkg.tar.zst` | `sudo pacman -U ./cli-assistant-*.pkg.tar.zst` |
+| Arch Linux | `packaging/PKGBUILD` | `cd packaging && makepkg -s` |
+
+RPM and DEB packages are built by CI; Arch Linux (including Arch Linux ARM)
+builds from the PKGBUILD locally, as is customary there.
 
 Building a package from this repository instead:
 
