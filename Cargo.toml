@@ -29,7 +29,11 @@ clap = { version = "4", features = ["derive"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "uuid", "chrono"] }
+# default-features off: we use the runtime query API only, not the query!()
+# macros. Keeping sqlx-macros out also avoids its bundled-SQLite proc-macro
+# dylib, which fails to resolve sqlite3_unlock_notify on some toolchains
+# (observed with Arch's rust package).
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "uuid", "chrono"] }
 
 # D-Bus
 zbus = { version = "4", default-features = false, features = ["tokio"] }
