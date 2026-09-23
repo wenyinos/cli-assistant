@@ -39,23 +39,111 @@ fn message_for_status(code: u16) -> String {
         .unwrap_or_else(|| format!("HTTP error {}", code))
 }
 
-/// Build the OpenAI-compatible chat completion payload.
-fn build_payload(config: &Config, user_message: &str) -> Value {
+/// Turns kept verbatim when compacting; everything older is folded into the
+/// summary.
+const COMPACT_KEEP_TURNS: usize = 6;
+
+/// Share of the history budget that triggers compaction.
+const COMPACT_THRESHOLD: f64 = 0.75;
+
+/// Output cap for the summarization request (the instruction asks for ≤600 words).
+const COMPACTION_MAX_TOKENS: u32 = 2048;
+
+/// Instructions handed to the model when compacting a conversation.
+const COMPACTION_INSTRUCTION: &str = "You are compacting the history of a Linux system administration \
+conversation so it can continue in a smaller context. Keep the user's goals, environment details, \
+decisions made, commands that worked or failed, and unresolved problems. Drop greetings, repetition, \
+and the full text of long command outputs. Reply in the same language as the conversation, write at \
+most 600 words, and output only the summary.";
+
+/// Approximate the token count of `text` without a tokenizer: ASCII characters
+/// count roughly four per token, non-ASCII (e.g. CJK) one per token. The
+/// estimate is deliberately conservative, so compaction runs early rather than
+/// after the API rejects an oversized request.
+pub fn estimate_tokens(text: &str) -> u64 {
+    let total = text.chars().count() as u64;
+    let ascii = text.chars().filter(char::is_ascii).count() as u64;
+    ascii / 4 + (total - ascii)
+}
+
+/// Build the OpenAI-compatible chat completion payload, injecting the summary
+/// and the retained turns (oldest first) ahead of the current question.
+fn build_payload(
+    config: &Config,
+    user_message: &str,
+    summary: Option<&str>,
+    turns: &[(String, String)],
+) -> Value {
+    let mut system = config.backend.effective_prompt();
+    if let Some(summary) = summary.filter(|s| !s.trim().is_empty()) {
+        system.push_str("\n\n[Summary of earlier conversation]\n");
+        system.push_str(summary);
+    }
+
+    let mut messages = vec![json!({"role": "system", "content": system})];
+    for (question, response) in turns {
+        messages.push(json!({"role": "user", "content": question}));
+        messages.push(json!({"role": "assistant", "content": response}));
+    }
+    messages.push(json!({"role": "user", "content": user_message}));
+
     json!({
         "model": config.backend.model,
-        "messages": [
-            {
-                "role": "system",
-                "content": config.backend.effective_prompt()
-            },
-            {
-                "role": "user",
-                "content": user_message
-            }
-        ],
+        "messages": messages,
         "max_tokens": config.backend.max_tokens,
         "temperature": config.backend.temperature
     })
+}
+
+/// How many leading turns should be folded into the summary before sending the
+/// next question. `None` while the history still fits the budget or there is
+/// nothing left to fold.
+pub fn compaction_point(
+    config: &Config,
+    user_message: &str,
+    summary: Option<&str>,
+    turns: &[(String, String)],
+) -> Option<usize> {
+    if turns.len() <= COMPACT_KEEP_TURNS {
+        return None;
+    }
+
+    let reserved = estimate_tokens(&config.backend.effective_prompt())
+        + estimate_tokens(user_message)
+        + summary.map(estimate_tokens).unwrap_or(0);
+    let budget = (config.backend.context_length as u64)
+        .saturating_sub(config.backend.max_tokens as u64)
+        .saturating_sub(reserved);
+
+    let used: u64 = turns
+        .iter()
+        .map(|(question, response)| estimate_tokens(question) + estimate_tokens(response))
+        .sum();
+
+    if (used as f64) <= (budget as f64) * COMPACT_THRESHOLD {
+        return None;
+    }
+
+    Some(turns.len() - COMPACT_KEEP_TURNS)
+}
+
+/// Render the material handed to the model when compacting a conversation.
+pub fn compaction_input(summary: Option<&str>, turns: &[(String, String)]) -> String {
+    let mut text = String::new();
+    if let Some(summary) = summary.filter(|s| !s.trim().is_empty()) {
+        text.push_str("Summary of the conversation so far:\n");
+        text.push_str(summary);
+        text.push_str("\n\n");
+    }
+    text.push_str("Turns to fold in:\n\n");
+    for (question, response) in turns {
+        text.push_str("User: ");
+        text.push_str(question);
+        text.push_str("\nAssistant: ");
+        text.push_str(response);
+        text.push_str("\n\n");
+    }
+    text
 }
 
 /// Exponential backoff for retry attempt `attempt` (1-based).
@@ -86,9 +174,34 @@ fn extract_response_text(body: &Value) -> Option<String> {
 
 /// Submit a chat completion request to an OpenAI-compatible API.
 ///
-/// Builds the payload from `config.backend` fields (model, prompt, max_tokens,
-/// temperature) and the user's message. Returns the assistant's reply text.
-pub async fn submit(config: &Config, user_message: &str) -> Result<String, ClaError> {
+/// `summary` and `turns` carry the conversation context used by the interactive
+/// pages; pass `None` and an empty slice for a single-turn question.
+pub async fn submit(
+    config: &Config,
+    user_message: &str,
+    summary: Option<&str>,
+    turns: &[(String, String)],
+) -> Result<String, ClaError> {
+    let payload = build_payload(config, user_message, summary, turns);
+    post_chat(config, &payload).await
+}
+
+/// Ask the model to fold `text` into a compact conversation summary.
+pub async fn summarize(config: &Config, text: &str) -> Result<String, ClaError> {
+    let payload = json!({
+        "model": config.backend.model,
+        "messages": [
+            {"role": "system", "content": COMPACTION_INSTRUCTION},
+            {"role": "user", "content": text}
+        ],
+        "max_tokens": COMPACTION_MAX_TOKENS,
+        "temperature": config.backend.temperature
+    });
+    post_chat(config, &payload).await
+}
+
+/// POST `payload` to the chat completions endpoint, retrying server errors.
+async fn post_chat(config: &Config, payload: &Value) -> Result<String, ClaError> {
     let client = client::create_client(config)?;
     let url = config.backend.chat_completions_url();
     let api_key = config.backend.effective_api_key();
@@ -98,8 +211,6 @@ pub async fn submit(config: &Config, user_message: &str) -> Result<String, ClaEr
             "no API key configured — set `api_key` in config or `CL_API_KEY` env var",
         ));
     }
-
-    let payload = build_payload(config, user_message);
 
     let auth_header = format!("Bearer {}", api_key);
     let mut last_err: Option<String> = None;
@@ -121,7 +232,7 @@ pub async fn submit(config: &Config, user_message: &str) -> Result<String, ClaEr
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Authorization", &auth_header)
-            .json(&payload)
+            .json(payload)
             .send()
             .await
         {
@@ -247,7 +358,7 @@ mod tests {
         config.backend.max_tokens = 1234;
         config.backend.temperature = 0.25;
 
-        let payload = build_payload(&config, "hello");
+        let payload = build_payload(&config, "hello", None, &[]);
 
         assert_eq!(payload["model"], "test-model");
         assert_eq!(
@@ -257,6 +368,87 @@ mod tests {
         assert_eq!(payload["messages"][1]["content"], "hello");
         assert_eq!(payload["max_tokens"], 1234);
         assert_eq!(payload["temperature"], 0.25);
+    }
+
+    #[test]
+    fn estimate_tokens_counts_ascii_and_cjk() {
+        assert_eq!(estimate_tokens(""), 0);
+        assert_eq!(estimate_tokens("abcd"), 1); // 4 ASCII chars ≈ 1 token
+        assert_eq!(estimate_tokens("你好"), 2); // one per non-ASCII char
+        assert_eq!(estimate_tokens("ab你好"), 2); // 2/4 + 2
+    }
+
+    #[test]
+    fn payload_injects_summary_and_turns() {
+        let mut config = Config::default();
+        config.backend.prompt = "test prompt".to_string();
+
+        let turns = vec![
+            ("q1".to_string(), "r1".to_string()),
+            ("q2".to_string(), "r2".to_string()),
+        ];
+        let payload = build_payload(&config, "q3", Some("earlier summary"), &turns);
+
+        let system = payload["messages"][0]["content"].as_str().unwrap();
+        assert_eq!(payload["messages"][0]["role"], "system");
+        assert!(system.starts_with("test prompt"));
+        assert!(system.contains("[Summary of earlier conversation]"));
+        assert!(system.contains("earlier summary"));
+
+        assert_eq!(payload["messages"][1]["role"], "user");
+        assert_eq!(payload["messages"][1]["content"], "q1");
+        assert_eq!(payload["messages"][2]["role"], "assistant");
+        assert_eq!(payload["messages"][2]["content"], "r1");
+        assert_eq!(payload["messages"][3]["content"], "q2");
+        assert_eq!(payload["messages"][4]["content"], "r2");
+        assert_eq!(payload["messages"][5]["role"], "user");
+        assert_eq!(payload["messages"][5]["content"], "q3");
+        assert_eq!(payload["messages"].as_array().unwrap().len(), 6);
+    }
+
+    #[test]
+    fn payload_without_context_stays_single_turn() {
+        let config = Config::default();
+        let payload = build_payload(&config, "hello", None, &[]);
+        assert_eq!(payload["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(payload["messages"][1]["content"], "hello");
+    }
+
+    #[test]
+    fn compaction_point_triggers_only_when_over_budget() {
+        let mut config = Config::default();
+        config.backend.context_length = 10_000;
+        config.backend.max_tokens = 1_000;
+
+        // Few turns: never compact, even when one turn is huge.
+        let few = vec![("x".repeat(50_000), "y".to_string())];
+        assert_eq!(compaction_point(&config, "hi", None, &few), None);
+
+        // Many small turns fit the budget.
+        let small: Vec<(String, String)> = (0..10)
+            .map(|_| ("short".to_string(), "answer".to_string()))
+            .collect();
+        assert_eq!(compaction_point(&config, "hi", None, &small), None);
+
+        // Many large turns overflow: fold everything but the last 6.
+        let large: Vec<(String, String)> = (0..10)
+            .map(|_| ("x".repeat(2_000), "y".repeat(2_000)))
+            .collect();
+        assert_eq!(compaction_point(&config, "hi", None, &large), Some(4));
+    }
+
+    #[test]
+    fn compaction_input_merges_summary_and_turns() {
+        let turns = vec![("q1".to_string(), "r1".to_string())];
+
+        let text = compaction_input(Some("old summary"), &turns);
+        assert!(text.contains("Summary of the conversation so far:"));
+        assert!(text.contains("old summary"));
+        assert!(text.contains("User: q1"));
+        assert!(text.contains("Assistant: r1"));
+
+        let text = compaction_input(None, &turns);
+        assert!(!text.contains("Summary of the conversation so far:"));
     }
 
     #[test]
@@ -292,7 +484,7 @@ mod tests {
         .await;
         let config = config_for(address);
 
-        let response = submit(&config, "hello").await.expect("submit");
+        let response = submit(&config, "hello", None, &[]).await.expect("submit");
         assert_eq!(response, "answer");
     }
 
@@ -301,7 +493,9 @@ mod tests {
         let address = serve_one(401, json!({"error": {"message": "bad key"}})).await;
         let config = config_for(address);
 
-        let error = submit(&config, "hello").await.expect_err("submit");
+        let error = submit(&config, "hello", None, &[])
+            .await
+            .expect_err("submit");
         assert!(error.to_string().contains("Authentication failed"));
     }
 
@@ -337,7 +531,7 @@ mod tests {
         });
         let config = config_for(address);
 
-        let response = submit(&config, "hello").await.expect("submit");
+        let response = submit(&config, "hello", None, &[]).await.expect("submit");
         assert_eq!(response, "recovered");
     }
 }

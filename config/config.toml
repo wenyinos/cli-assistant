@@ -7,30 +7,38 @@
 [backend]
 # Base URL of the OpenAI-compatible API (include version path, e.g. /v1).
 # The daemon appends /chat/completions automatically.
-endpoint = "https://api.openai.com/v1"
+endpoint = "https://api.deepseek.com/v1"
 
 # Model name sent in the request body.
-model = "gpt-4"
+model = "deepseek-v4-flash"
 
 # API key for Bearer authentication.
 # Can also be set via the CL_API_KEY environment variable (env takes precedence).
 api_key = ""
 
 # System prompt prepended to every conversation.
-prompt = "You are a helpful assistant for Linux system administration."
+prompt = "You are a command-line assistant for Linux system administration. Answer concisely and accurately, and prefer standard, widely available tools. Keep commands copy-pasteable; before any destructive or irreversible step, explain what it does and call out the risk. If a request is ambiguous, state your assumption briefly and answer the most likely intent."
 
-# Maximum tokens in the assistant's response.
-max_tokens = 4096
+# Maximum tokens in the assistant's response (must not exceed the model's
+# output limit, e.g. 384K for deepseek-v4-flash; some endpoints reject larger
+# values).
+max_tokens = 32768
+
+# Model context window in tokens. The conversation pages
+# (chat --interactive / --tui) use it to decide when to compact history into a
+# summary. Keep it at or below the model's real window: if it is larger,
+# requests hit the API context limit before compaction triggers.
+context_length = 256000
 
 # Sampling temperature (0.0–2.0). Higher values produce more random output.
-temperature = 0.7
+temperature = 0.3
 
 # Default response language. Leave empty to let the model decide.
 # Examples: "zh-CN" (简体中文), "zh-TW" (繁體中文), "en" (English), "ja" (日本語)
 language = ""
 
 # HTTP request timeout in seconds.
-timeout = 60
+timeout = 120
 
 # Optional proxy settings (protocol → URL).
 # [backend.proxies]

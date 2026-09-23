@@ -46,7 +46,7 @@ pub struct BackendSchema {
     /// The client appends `/chat/completions` automatically.
     /// Examples: `https://api.openai.com/v1`, `https://my-proxy.example.com/v1`
     pub endpoint: String,
-    /// Model name to use (e.g. `gpt-4`, `gpt-3.5-turbo`).
+    /// Model name to use (e.g. `deepseek-v4-flash`, `gpt-4o`).
     pub model: String,
     /// API key for authentication (`Bearer` token).
     /// Can also be set via `CL_API_KEY` environment variable (env takes precedence).
@@ -55,6 +55,10 @@ pub struct BackendSchema {
     pub prompt: String,
     /// Maximum tokens in the response.
     pub max_tokens: u32,
+    /// Model context window in tokens. The conversation pages
+    /// (`chat --interactive` / `--tui`) use it to decide when to compact
+    /// history into a summary.
+    pub context_length: u32,
     /// Sampling temperature (0.0–2.0). Higher = more random.
     pub temperature: f32,
     /// Default response language (e.g. `"zh-CN"`, `"en"`, `"ja"`).
@@ -72,15 +76,22 @@ pub struct BackendSchema {
 impl Default for BackendSchema {
     fn default() -> Self {
         Self {
-            endpoint: String::from("https://api.openai.com/v1"),
-            model: String::from("gpt-4"),
+            endpoint: String::from("https://api.deepseek.com/v1"),
+            model: String::from("deepseek-v4-flash"),
             api_key: String::new(),
-            prompt: String::from("You are a helpful assistant for Linux system administration."),
-            max_tokens: 4096,
-            temperature: 0.7,
+            prompt: String::from(
+                "You are a command-line assistant for Linux system administration. \
+                 Answer concisely and accurately, and prefer standard, widely available tools. \
+                 Keep commands copy-pasteable; before any destructive or irreversible step, \
+                 explain what it does and call out the risk. If a request is ambiguous, \
+                 state your assumption briefly and answer the most likely intent.",
+            ),
+            max_tokens: 32768,
+            context_length: 256000,
+            temperature: 0.3,
             language: String::new(),
             auth: AuthSchema::default(),
-            timeout: 60,
+            timeout: 120,
             proxies: BTreeMap::new(),
         }
     }
@@ -100,6 +111,59 @@ impl BackendSchema {
     pub fn chat_completions_url(&self) -> String {
         let base = self.endpoint.trim_end_matches('/');
         format!("{}/chat/completions", base)
+    }
+
+    /// The model listing endpoint URL, used by the setup wizard.
+    pub fn models_url(&self) -> String {
+        let base = self.endpoint.trim_end_matches('/');
+        format!("{}/models", base)
+    }
+
+    /// Render `template` with the wizard-managed backend values substituted in.
+    ///
+    /// Only `endpoint`, `model`, `api_key` and `language` inside the
+    /// `[backend]` section are replaced; every other line — comments, and any
+    /// values the user edited by hand — is copied verbatim. Values are emitted
+    /// as escaped TOML string literals, so arbitrary API keys cannot break the
+    /// generated file.
+    pub fn render_into_template(&self, template: &str) -> String {
+        let replacements = [
+            ("endpoint", self.endpoint.as_str()),
+            ("api_key", self.api_key.as_str()),
+            ("model", self.model.as_str()),
+            ("language", self.language.as_str()),
+        ];
+
+        let mut out = String::with_capacity(template.len() + 128);
+        let mut section = String::new();
+
+        for line in template.lines() {
+            let trimmed = line.trim_start();
+
+            if trimmed.starts_with('[') {
+                section = trimmed
+                    .trim_start_matches('[')
+                    .split(']')
+                    .next()
+                    .unwrap_or_default()
+                    .to_string();
+            } else if section == "backend" && !trimmed.starts_with('#') {
+                if let Some((key, _)) = trimmed.split_once('=') {
+                    let key = key.trim();
+                    if let Some((_, value)) = replacements.iter().find(|(k, _)| *k == key) {
+                        let indent = &line[..line.len() - trimmed.len()];
+                        let literal = toml::Value::String(value.to_string()).to_string();
+                        out.push_str(&format!("{}{} = {}\n", indent, key, literal));
+                        continue;
+                    }
+                }
+            }
+
+            out.push_str(line);
+            out.push('\n');
+        }
+
+        out
     }
 
     /// Build the effective system prompt, appending language instruction if configured.
@@ -223,6 +287,20 @@ impl AppConfig {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Config template rendering (setup wizard)
+// ---------------------------------------------------------------------------
+
+/// Embedded configuration template. The single source of truth is the
+/// repository file `config/config.toml`, so generated files keep the
+/// documented defaults and all of their comments.
+const CONFIG_TEMPLATE: &str = include_str!("../../../config/config.toml");
+
+/// The built-in configuration template, used when no config file exists yet.
+pub fn default_config_template() -> &'static str {
+    CONFIG_TEMPLATE
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,7 +337,7 @@ enabled = false
         assert_eq!(config.backend.api_key, "sk-test123");
         assert_eq!(config.backend.max_tokens, 2048);
         assert!((config.backend.temperature - 0.3).abs() < f32::EPSILON);
-        assert_eq!(config.backend.timeout, 60); // default
+        assert_eq!(config.backend.timeout, 120); // default
         assert!(!config.history.enabled);
     }
 
@@ -267,14 +345,18 @@ enabled = false
     fn load_from_missing_path_returns_default() {
         let path = PathBuf::from("/nonexistent/path/config.toml");
         let config = AppConfig::load_from_path(&path).expect("load");
-        assert_eq!(config.backend.endpoint, "https://api.openai.com/v1");
-        assert_eq!(config.backend.model, "gpt-4");
+        assert_eq!(config.backend.endpoint, "https://api.deepseek.com/v1");
+        assert_eq!(config.backend.model, "deepseek-v4-flash");
     }
 
     #[test]
     fn chat_completions_url() {
-        let mut backend = BackendSchema::default();
-        // default endpoint already includes /v1
+        // The endpoint already includes the version path; only /chat/completions
+        // is appended, and a trailing slash is trimmed.
+        let mut backend = BackendSchema {
+            endpoint: "https://api.openai.com/v1".to_string(),
+            ..Default::default()
+        };
         assert_eq!(
             backend.chat_completions_url(),
             "https://api.openai.com/v1/chat/completions"
@@ -304,5 +386,106 @@ enabled = false
     fn database_schema_defaults() {
         let db = DatabaseSchema::default();
         assert_eq!(db.path, PathBuf::from("/var/lib/cli-assistant/cla.db"));
+    }
+
+    #[test]
+    fn models_url() {
+        let mut backend = BackendSchema {
+            endpoint: "https://api.openai.com/v1".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(backend.models_url(), "https://api.openai.com/v1/models");
+
+        backend.endpoint = "https://my-proxy.example.com/v2/".to_string();
+        assert_eq!(
+            backend.models_url(),
+            "https://my-proxy.example.com/v2/models"
+        );
+    }
+
+    /// A backend carrying only the fields the setup wizard manages.
+    fn wizard_values(endpoint: &str, api_key: &str, model: &str, language: &str) -> BackendSchema {
+        BackendSchema {
+            endpoint: endpoint.to_string(),
+            api_key: api_key.to_string(),
+            model: model.to_string(),
+            language: language.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn rendered_template_parses_and_keeps_values() {
+        let values = wizard_values(
+            "https://api.deepseek.com/v1",
+            "sk-secret",
+            "deepseek-chat",
+            "zh-CN",
+        );
+        let rendered = values.render_into_template(default_config_template());
+
+        let config: AppConfig = toml::from_str(&rendered).expect("rendered config must parse");
+        assert_eq!(config.backend.endpoint, "https://api.deepseek.com/v1");
+        assert_eq!(config.backend.api_key, "sk-secret");
+        assert_eq!(config.backend.model, "deepseek-chat");
+        assert_eq!(config.backend.language, "zh-CN");
+
+        // Fields the wizard does not ask about keep their template defaults.
+        assert_eq!(config.backend.max_tokens, 32768);
+        assert_eq!(config.backend.context_length, 256000);
+        assert!((config.backend.temperature - 0.3).abs() < f32::EPSILON);
+        assert_eq!(config.backend.timeout, 120);
+        assert_eq!(
+            config.database.path,
+            PathBuf::from("/var/lib/cli-assistant/cla.db")
+        );
+        assert!(config.history.enabled);
+
+        // Comments survive rendering.
+        assert!(rendered.contains("# Base URL of the OpenAI-compatible API"));
+        assert!(rendered.contains("# ── Database (SQLite)"));
+    }
+
+    #[test]
+    fn rendered_template_escapes_hostile_values() {
+        let values = wizard_values(
+            "https://example.com/v1",
+            "sk-\"quoted\"\\back\\slash",
+            "m\"odel",
+            "",
+        );
+        let rendered = values.render_into_template(default_config_template());
+
+        let config: AppConfig = toml::from_str(&rendered).expect("rendered config must parse");
+        assert_eq!(config.backend.api_key, "sk-\"quoted\"\\back\\slash");
+        assert_eq!(config.backend.model, "m\"odel");
+        assert_eq!(config.backend.language, "");
+    }
+
+    #[test]
+    fn render_into_template_preserves_hand_edited_values() {
+        // Re-running the wizard must not reset values the user edited outside it.
+        let template = "# my config\n\
+                        [backend]\n\
+                        endpoint = \"https://old.example.com/v1\"\n\
+                        model = \"old-model\"\n\
+                        api_key = \"\"\n\
+                        max_tokens = 64000\n\
+                        language = \"\"\n\
+                        \n\
+                        [database]\n\
+                        path = \"/tmp/custom.db\"\n";
+
+        let values = wizard_values("https://new.example.com/v1", "sk-new", "new-model", "zh-CN");
+        let rendered = values.render_into_template(template);
+
+        let config: AppConfig = toml::from_str(&rendered).expect("rendered config must parse");
+        assert_eq!(config.backend.endpoint, "https://new.example.com/v1");
+        assert_eq!(config.backend.api_key, "sk-new");
+        assert_eq!(config.backend.model, "new-model");
+        assert_eq!(config.backend.language, "zh-CN");
+        assert_eq!(config.backend.max_tokens, 64000);
+        assert_eq!(config.database.path, PathBuf::from("/tmp/custom.db"));
+        assert!(rendered.contains("# my config"));
     }
 }

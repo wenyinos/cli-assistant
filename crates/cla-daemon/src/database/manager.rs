@@ -33,6 +33,7 @@ impl DatabaseManager {
 
         let manager = Self { pool };
         manager.create_tables().await?;
+        manager.migrate().await?;
 
         Ok(manager)
     }
@@ -60,6 +61,7 @@ impl DatabaseManager {
                 chat_id    TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                summary    TEXT,
                 deleted_at TEXT,
                 FOREIGN KEY (chat_id) REFERENCES chats(id)
             )",
@@ -75,6 +77,7 @@ impl DatabaseManager {
                 response   TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                summarized INTEGER NOT NULL DEFAULT 0,
                 deleted_at TEXT,
                 FOREIGN KEY (history_id) REFERENCES histories(id)
             )",
@@ -108,5 +111,32 @@ impl DatabaseManager {
     /// Borrow the underlying connection pool.
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    /// Add columns introduced after a database was first created. SQLite has
+    /// no `ADD COLUMN IF NOT EXISTS`, so check `pragma_table_info` first; the
+    /// procedure is idempotent and safe to run on every start.
+    async fn migrate(&self) -> anyhow::Result<()> {
+        for (table, column, definition) in [
+            ("histories", "summary", "TEXT"),
+            ("interactions", "summarized", "INTEGER NOT NULL DEFAULT 0"),
+        ] {
+            if self.column_exists(table, column).await? {
+                continue;
+            }
+            let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {definition}");
+            sqlx::query(&sql).execute(&self.pool).await?;
+            info!("Added column {table}.{column}");
+        }
+        Ok(())
+    }
+
+    /// Whether `table` already has a column named `column`.
+    async fn column_exists(&self, table: &str, column: &str) -> anyhow::Result<bool> {
+        let names: Vec<String> =
+            sqlx::query_scalar(&format!("SELECT name FROM pragma_table_info('{table}')"))
+                .fetch_all(&self.pool)
+                .await?;
+        Ok(names.iter().any(|name| name == column))
     }
 }

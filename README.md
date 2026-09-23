@@ -10,8 +10,9 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 
 - **Ask questions in natural language** from your terminal
 - **OpenAI-compatible** — works with OpenAI, Azure OpenAI, local LLMs, or any OpenAI-compatible endpoint
+- **Setup wizard** — `sudo c setup` configures the endpoint, API key, model (pickable from the endpoint's `/models` list) and reply language
 - **Chat sessions & history** — persistent SQLite-backed conversation history
-- **Interactive mode** — line-based and full-screen TUI conversations
+- **Interactive mode** — line-based and full-screen TUI conversations that carry recent turns as context and compact older history into a summary automatically
 - **Markdown rendering** — colored terminal output with code blocks, tables, and headers
 - **Configurable language** — force replies in your preferred language
 - **D-Bus daemon architecture** — client/daemon separation with system activation and caller authorization
@@ -20,39 +21,37 @@ A fast, lightweight CLI assistant for Linux system administration — powered by
 
 ## Installation
 
-### From Release (Recommended)
+Prebuilt packages for **x86_64** and **aarch64** are published on the
+[Releases](../../releases) page:
 
-Download the latest tarball from [Releases](../../releases), then run the install script:
+| Distribution | Package | Install |
+|---|---|---|
+| Fedora / RHEL | `.rpm` | `sudo dnf install ./cli-assistant-*.rpm` |
+| Debian / Ubuntu | `.deb` | `sudo apt install ./cli-assistant_*.deb` |
+| Arch Linux | `.pkg.tar.zst` | `sudo pacman -U ./cli-assistant-*.pkg.tar.zst` |
+
+Building a package from this repository instead:
 
 ```bash
-# Download x86_64 (replace VERSION with actual version, e.g. v0.8.0)
-curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-x86_64-linux-gnu.tar.gz
+# RPM (needs the source tarball in ~/rpmbuild/SOURCES; CI creates it on tags)
+rpmbuild -ba packaging/cli-assistant.spec
 
-# Or download aarch64
-curl -LO https://github.com/wenyinos/cli-assistant/releases/download/VERSION/cli-assistant-aarch64-linux-gnu.tar.gz
+# Debian / Ubuntu (native package, builds in place)
+dpkg-buildpackage -us -uc -b
 
-# Extract
-tar xzf cli-assistant-*-linux-gnu.tar.gz
-cd cli-assistant
-
-# Install (requires root)
-sudo ./install.sh
+# Arch Linux — and Arch Linux ARM, which builds the aarch64 package locally
+cd packaging && makepkg -s
 ```
 
-The install script will:
-- Copy binaries (`c`, `clad`) to `/usr/local/bin`
-- Install D-Bus policy to `/etc/dbus-1/system.d/`
-- Install D-Bus activation services to `/usr/share/dbus-1/system-services/`
-- Register `clad` as a systemd service
-- Install `c(1)` and `clad(8)` man pages
-- Write default config to `/etc/cli-assistant/config.toml`
+The packages install the binaries (`c`, `clad`), D-Bus policy and activation
+files, the systemd unit, and the man pages, and prepare `/etc/cli-assistant/`.
+The config file itself is created by the setup wizard:
 
 ```bash
-# Edit config — set your API key and endpoint
-sudo vim /etc/cli-assistant/config.toml
-
-# Restart the daemon to apply changes
-sudo systemctl restart clad
+# Configure the backend (first run) — prompts for endpoint, API key, model
+# (selectable from the endpoint's /models list) and reply language, writes
+# /etc/cli-assistant/config.toml and restarts clad
+sudo c setup
 
 # Test
 c "How do I check disk space?"
@@ -64,10 +63,8 @@ c "How do I check disk space?"
 # Build
 cargo build --release
 
-# Configure
-sudo mkdir -p /etc/cli-assistant
-sudo cp config/config.toml /etc/cli-assistant/config.toml
-# Edit /etc/cli-assistant/config.toml — set your API key and endpoint
+# Configure — writes /etc/cli-assistant/config.toml and restarts clad
+sudo ./target/release/c setup
 
 # Install D-Bus policy
 sudo cp config/com.cli-assistant.conf /etc/dbus-1/system.d/
@@ -77,43 +74,50 @@ sudo ./target/release/clad &          # start daemon
 ./target/release/c "How do I check disk space?"  # ask a question
 ```
 
-For detailed build, test, and run instructions, see **[docs/BUILD.md](docs/BUILD.md)**.
+For detailed build, test, and run guidance, see **[AGENTS.md](AGENTS.md)**.
 
 ### Uninstall
 
 ```bash
-sudo ./scripts/uninstall.sh
+sudo dnf remove cli-assistant cli-assistant-selinux   # Fedora / RHEL
+sudo apt remove cli-assistant                          # Debian / Ubuntu
+sudo pacman -R cli-assistant                           # Arch Linux
 ```
+
+Configuration (`/etc/cli-assistant/`) and data (`/var/lib/cli-assistant/`) are
+preserved; remove them manually if you want a clean slate.
 
 ### Service Management
 
 ```bash
 sudo systemctl status clad     # Check service status
-sudo systemctl restart clad    # Restart (required after config changes)
+sudo systemctl restart clad    # Restart (required after manual config edits)
 sudo systemctl stop clad       # Stop the daemon
 sudo systemctl start clad      # Start the daemon
-sudo systemctl enable clad     # Enable on boot (done by install.sh)
+sudo systemctl enable clad     # Enable on boot (done by the package)
 sudo systemctl disable clad    # Disable on boot
 journalctl -u clad -f          # View live logs
 ```
 
 ## Configuration
 
-Config file: `/etc/cli-assistant/config.toml`
+Config file: `/etc/cli-assistant/config.toml` — created by the `sudo c setup` wizard.
+Restart the daemon after manual edits (`sudo systemctl restart clad`).
 
 ```toml
 [backend]
-endpoint  = "https://api.openai.com/v1"   # any OpenAI-compatible endpoint
-model     = "gpt-4"
+endpoint  = "https://api.deepseek.com/v1"   # any OpenAI-compatible endpoint
+model     = "deepseek-v4-flash"
 api_key   = "sk-..."
-prompt    = "You are a helpful assistant for Linux system administration."
+prompt    = "You are a command-line assistant for Linux system administration. Answer concisely and accurately, and prefer standard, widely available tools. Keep commands copy-pasteable; before any destructive or irreversible step, explain what it does and call out the risk. If a request is ambiguous, state your assumption briefly and answer the most likely intent."
 language  = "zh-CN"                     # reply language (empty = auto)
-max_tokens   = 4096
-temperature  = 0.7
-timeout      = 60
+max_tokens     = 32768
+context_length = 256000                 # model context window (drives auto-compaction)
+temperature  = 0.3
+timeout      = 120
 
 [database]
-path = "~/.local/share/cli-assistant/cla.db"
+path = "/var/lib/cli-assistant/cla.db"
 
 [history]
 enabled = true
@@ -132,6 +136,7 @@ distributions.
 ## Usage
 
 ```bash
+sudo c setup                    # first-run wizard: endpoint, API key, model, reply language
 c "question"                    # ask a question (default: chat)
 c chat "question"               # same as above
 c chat --interactive            # interactive conversation mode
@@ -151,7 +156,7 @@ c shell --enable-interactive    # enable Ctrl+G shortcut
 | **Language** | Python 3.9+ | Rust (edition 2021) |
 | **Runtime** | CPython + pip dependencies | Single static binary, no runtime deps |
 | **API Backend** | RHEL Lightspeed only | Any OpenAI-compatible endpoint |
-| **LLM Config** | Hardcoded backend | Configurable model, key, prompt, temperature, max_tokens, language |
+| **LLM Config** | Hardcoded backend | Configurable model, key, prompt, temperature, max_tokens, context_length, language |
 | **Database** | SQLAlchemy (SQLite/MySQL/PostgreSQL) | sqlx + SQLite only (simpler, lighter) |
 | **IPC** | dasbus (Python D-Bus) | zbus 4.x (native async Rust D-Bus) |
 | **HTTP** | requests + urllib3 | reqwest + rustls (async, no OpenSSL) |
@@ -159,7 +164,7 @@ c shell --enable-interactive    # enable Ctrl+G shortcut
 | **Rendering** | python-markdown → ANSI | Custom markdown→ANSI renderer |
 | **Dependencies** | ~10 Python packages | Pure Rust crates, vendored via Cargo |
 | **Startup** | ~200ms (Python import) | ~5ms (native binary) |
-| **Docker/CI** | Included but complex | Not needed — just `cargo build` |
+| **Docker/CI** | Included but complex | GitHub Actions: fmt/clippy/test, plus rpm/deb/pacman builds for x86_64 and aarch64 |
 
 ## Architecture
 
@@ -173,7 +178,7 @@ c (client)  ──D-Bus──▶  clad (daemon)  ──HTTP──▶  LLM API
 |---|---|
 | `cla-common` | Config, errors, session, file utils, system info |
 | `cla-dbus` | D-Bus interface definitions & data structures |
-| `cla-client` | CLI parser, renderer, D-Bus client |
+| `cla-client` | CLI parser, renderer, setup wizard, D-Bus client |
 | `cla-daemon` | D-Bus server, HTTP client, SQLite storage, history |
 
 ## License

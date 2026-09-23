@@ -1,0 +1,47 @@
+# Maintainer: cli-assistant contributors <wenyinos@users.noreply.github.com>
+
+pkgname=cli-assistant
+pkgver=0.9.0
+pkgrel=1
+pkgdesc="CLI assistant for Linux system administration (OpenAI-compatible backend)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/wenyinos/cli-assistant"
+license=('MIT')
+depends=('gcc-libs')
+makedepends=('rust')
+install=cli-assistant.install
+source=("$pkgname-$pkgver.tar.gz::https://github.com/wenyinos/cli-assistant/archive/refs/tags/v$pkgver.tar.gz")
+# Run `updpkgsums` once the v$pkgver tag exists to pin the checksum.
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  cargo build --release
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+
+  install -Dm755 target/release/c "$pkgdir/usr/bin/c"
+  install -Dm755 target/release/clad "$pkgdir/usr/bin/clad"
+
+  # The in-repo unit points at /usr/local/bin; packages install to /usr/bin.
+  sed 's|/usr/local/bin|/usr/bin|' config/clad.service \
+    | install -Dm644 /dev/stdin "$pkgdir/usr/lib/systemd/system/clad.service"
+
+  install -Dm644 config/com.cli-assistant.conf \
+    "$pkgdir/usr/share/dbus-1/system.d/com.cli-assistant.conf"
+  install -Dm644 config/com.redhat.lightspeed.chat.service \
+    "$pkgdir/usr/share/dbus-1/system-services/com.redhat.lightspeed.chat.service"
+  install -Dm644 config/com.redhat.lightspeed.history.service \
+    "$pkgdir/usr/share/dbus-1/system-services/com.redhat.lightspeed.history.service"
+  install -Dm644 config/com.redhat.lightspeed.user.service \
+    "$pkgdir/usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service"
+
+  install -Dm644 data/release/man/c.1 "$pkgdir/usr/share/man/man1/c.1"
+  install -Dm644 data/release/man/clad.8 "$pkgdir/usr/share/man/man8/clad.8"
+
+  # Config and data directories; their contents are created on first use.
+  install -dm755 "$pkgdir/etc/cli-assistant"
+  install -dm700 "$pkgdir/var/lib/cli-assistant"
+}

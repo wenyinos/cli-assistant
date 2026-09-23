@@ -117,6 +117,9 @@ pub struct Question {
     pub terminal: Option<TerminalInput>,
     /// Optional host system information.
     pub systeminfo: Option<SystemInfo>,
+    /// Chat session (by name) whose recent history should be attached as
+    /// conversation context. `None` keeps the question single-turn.
+    pub context_chat: Option<String>,
 }
 
 /// A response payload returned by the assistant over D-Bus.
@@ -162,4 +165,65 @@ pub struct HistoryEntry {
 pub struct HistoryList {
     /// The history entries.
     pub histories: Vec<HistoryEntry>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zbus::zvariant::{
+        serialized::{Context, Format},
+        to_bytes_for_signature, Dict, Endian, Signature, Value,
+    };
+
+    /// Encode a `Question`-shaped `a{sv}` dict containing only the given keys,
+    /// as an older client (or a single-turn call) would send it.
+    fn encode_dict(entries: &[(&str, &str)]) -> zbus::zvariant::serialized::Data<'static, 'static> {
+        let mut dict = Dict::new(
+            Signature::from_static_str("s").unwrap(),
+            Signature::from_static_str("v").unwrap(),
+        );
+        for (key, value) in entries {
+            // `a{sv}` values are variants, so wrap the string in `Value::Value`.
+            dict.append(
+                Value::from(*key),
+                Value::Value(Box::new(Value::from(*value))),
+            )
+            .expect("append");
+        }
+        let ctxt = Context::new(Format::DBus, Endian::Little, 0);
+        to_bytes_for_signature(ctxt, "a{sv}", &dict).expect("encode")
+    }
+
+    #[test]
+    fn question_without_context_chat_deserializes_to_none() {
+        // Older clients omit the key entirely; the daemon must still accept it.
+        let encoded = encode_dict(&[("message", "hello")]);
+        let (question, _): (Question, usize) = encoded.deserialize().expect("deserialize");
+        assert_eq!(question.message, "hello");
+        assert!(question.context_chat.is_none());
+    }
+
+    #[test]
+    fn question_with_context_chat_deserializes() {
+        let encoded = encode_dict(&[("message", "hello"), ("context_chat", "default")]);
+        let (question, _): (Question, usize) = encoded.deserialize().expect("deserialize");
+        assert_eq!(question.context_chat.as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn question_roundtrips_with_context_chat() {
+        let question = Question {
+            message: "hi".to_string(),
+            stdin: None,
+            attachment: None,
+            terminal: None,
+            systeminfo: None,
+            context_chat: Some("work".to_string()),
+        };
+        let ctxt = Context::new(Format::DBus, Endian::Little, 0);
+        let encoded = to_bytes_for_signature(ctxt, "a{sv}", &question).expect("encode");
+        let (decoded, _): (Question, usize) = encoded.deserialize().expect("deserialize");
+        assert_eq!(decoded.message, "hi");
+        assert_eq!(decoded.context_chat.as_deref(), Some("work"));
+    }
 }

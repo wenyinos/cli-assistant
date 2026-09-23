@@ -48,6 +48,7 @@ pub async fn run(
     dbus: DbusClient,
     user_id: String,
     chat_id: String,
+    chat_name: String,
     stdin: Option<String>,
     _plain: bool,
 ) -> i32 {
@@ -74,7 +75,7 @@ pub async fn run(
         }
     };
 
-    let result = run_loop(&mut terminal, dbus, user_id, chat_id, stdin).await;
+    let result = run_loop(&mut terminal, dbus, user_id, chat_id, chat_name, stdin).await;
 
     let _ = execute!(io::stdout(), LeaveAlternateScreen);
     let _ = disable_raw_mode();
@@ -86,6 +87,7 @@ async fn run_loop(
     dbus: DbusClient,
     user_id: String,
     chat_id: String,
+    chat_name: String,
     stdin: Option<String>,
 ) -> i32 {
     let (tx, mut rx) = mpsc::unbounded_channel::<TuiEvent>();
@@ -121,6 +123,7 @@ async fn run_loop(
                         let dbus = dbus.clone();
                         let user_id = user_id.clone();
                         let chat_id = chat_id.clone();
+                        let chat_name = chat_name.clone();
                         let stdin = stdin.clone();
                         let tx = tx.clone();
                         tokio::spawn(async move {
@@ -130,6 +133,7 @@ async fn run_loop(
                                 attachment: None,
                                 terminal: None,
                                 systeminfo: None,
+                                context_chat: Some(chat_name),
                             };
 
                             let response = match dbus.ask_question(&user_id, &question).await {

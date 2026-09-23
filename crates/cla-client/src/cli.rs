@@ -115,4 +115,8 @@ pub enum Commands {
         #[arg(long)]
         disable_interactive: bool,
     },
+
+    /// Configure the backend and write /etc/cli-assistant/config.toml.
+    /// Requires root (`sudo c setup`).
+    Setup,
 }

@@ -23,6 +23,9 @@ pub struct HistoryModel {
     pub chat_id: String,
     pub created_at: String,
     pub updated_at: String,
+    /// Compacted summary of earlier conversation turns. `None` until the
+    /// conversation grows large enough to be compacted.
+    pub summary: Option<String>,
     pub deleted_at: Option<String>,
 }
 
@@ -35,5 +38,7 @@ pub struct InteractionModel {
     pub response: String,
     pub created_at: String,
     pub updated_at: String,
+    /// Whether this turn has been folded into the history summary.
+    pub summarized: bool,
     pub deleted_at: Option<String>,
 }

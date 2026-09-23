@@ -3,6 +3,7 @@
 mod cli;
 mod dbus_client;
 mod rendering;
+mod setup;
 mod terminal;
 mod tui;
 
@@ -38,7 +39,7 @@ const DEFAULT_CHAT_NAME: &str = "default";
 const DEFAULT_CHAT_DESCRIPTION: &str = "Default Command Line Assistant Chat.";
 
 /// Known subcommands — if none of these appear in argv, default to "chat".
-const SUBCOMMANDS: &[&str] = &["chat", "history", "feedback", "shell"];
+const SUBCOMMANDS: &[&str] = &["chat", "history", "feedback", "shell", "setup"];
 
 /// Global flags that should be preserved before the subcommand.
 const GLOBAL_FLAGS: &[&str] = &[
@@ -98,9 +99,9 @@ async fn main() {
     let renderer = Renderer::new(cli.plain);
 
     // Read stdin if available. The shell capture command consumes stdin itself,
-    // so leave the pipe intact for the PTY child.
+    // and the setup wizard reads its answers from it, so leave it intact.
     let stdin = match &cli.command {
-        Some(Commands::Shell { .. }) => None,
+        Some(Commands::Shell { .. }) | Some(Commands::Setup) => None,
         _ => read_stdin(),
     };
 
@@ -180,6 +181,7 @@ async fn main() {
             enable_interactive,
             disable_interactive,
         ),
+        Commands::Setup => setup::run(&renderer).await,
     };
 
     process::exit(exit_code);
@@ -205,6 +207,10 @@ async fn handle_chat(
     description: Option<String>,
     plain: bool,
 ) -> i32 {
+    if let Some(code) = setup::check_configured(renderer) {
+        return code;
+    }
+
     let dbus = match DbusClient::new().await {
         Ok(c) => c,
         Err(e) => {
@@ -294,7 +300,7 @@ async fn handle_chat(
             );
             return 1;
         }
-        return tui::run(dbus, user_id, chat_id, stdin, plain).await;
+        return tui::run(dbus, user_id, chat_id, name, stdin, plain).await;
     }
 
     if interactive {
@@ -304,7 +310,8 @@ async fn handle_chat(
             );
             return 1;
         }
-        return handle_interactive_chat(renderer, &dbus, &user_id, &chat_id, stdin, plain).await;
+        return handle_interactive_chat(renderer, &dbus, &user_id, &chat_id, &name, stdin, plain)
+            .await;
     }
 
     // Gather input
@@ -348,6 +355,8 @@ async fn handle_chat(
             TerminalInput { output }
         }),
         systeminfo: None,
+        // Single-shot questions stay context-free by design.
+        context_chat: None,
     };
 
     // Show spinner and submit
@@ -379,12 +388,16 @@ async fn handle_interactive_chat(
     dbus: &DbusClient,
     user_id: &str,
     chat_id: &str,
+    chat_name: &str,
     stdin: Option<String>,
     _plain: bool,
 ) -> i32 {
     renderer.normal("Welcome to the interactive mode for command line assistant!");
     renderer.normal("To exit, press Ctrl + C or type '.exit'.");
-    renderer.normal("The current session does not include running context.");
+    renderer.normal(
+        "This conversation keeps its recent turns as context and compacts older ones \
+         into a summary as it grows.",
+    );
     renderer.normal("");
 
     loop {
@@ -413,6 +426,7 @@ async fn handle_interactive_chat(
             attachment: None,
             terminal: None,
             systeminfo: None,
+            context_chat: Some(chat_name.to_string()),
         };
 
         eprint!("⁺₊+ Asking RHEL Lightspeed...");
@@ -814,6 +828,7 @@ mod tests {
             attachment: None,
             terminal: None,
             systeminfo: None,
+            context_chat: None,
         }
     }
 
@@ -876,5 +891,12 @@ mod tests {
         assert_eq!(trimmed, "你");
         assert!(truncated);
         assert!(trimmed.is_char_boundary(trimmed.len()));
+    }
+
+    #[test]
+    fn setup_subcommand_is_not_rewritten_to_chat() {
+        let args = add_default_command(vec!["c".to_string(), "setup".to_string()]);
+        let cli = Cli::try_parse_from(args).expect("parse");
+        assert!(matches!(cli.command, Some(Commands::Setup)));
     }
 }

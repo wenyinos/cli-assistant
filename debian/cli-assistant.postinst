@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+#DEBHELPER#
+
+if [ "$1" = "configure" ]; then
+    echo "Run 'sudo c setup' to configure the backend (endpoint, API key, model)."
+fi
+
+exit 0

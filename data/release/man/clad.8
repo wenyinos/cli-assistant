@@ -1,4 +1,4 @@
-.TH CLAD 8 "2026-08-03" "0.8.0" "cli-assistant"
+.TH CLAD 8 "2026-09-23" "0.9.0" "cli-assistant"
 .SH NAME
 clad \- Command Line Assistant daemon
 .SH SYNOPSIS
@@ -9,8 +9,11 @@ com.redhat.lightspeed.chat, com.redhat.lightspeed.history, and
 com.redhat.lightspeed.user service names on the system bus, sends requests to
 the configured OpenAI-compatible API, and stores history in SQLite.
 .SH CONFIGURATION
-The daemon reads configuration from /etc/cli-assistant/config.toml, with XDG
-configuration paths and defaults as documented in the README.
+The daemon reads its configuration exclusively from
+/etc/cli-assistant/config.toml on all distributions (no XDG lookup). The file
+is created by the setup wizard, run as root with
+.BR "c setup" .
+Restart the daemon after editing the file by hand.
 .SH SIGNALS
 .TP
 .B SIGTERM
@@ -18,7 +21,7 @@ Stop the daemon.
 .SH FILES
 .TP
 .I /etc/cli-assistant/config.toml
-Main configuration file.
+Main configuration file, created by \fBc setup\fR.
 .TP
 .I /var/lib/cli-assistant/cla.db
 SQLite history database.

@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+# The workspace builds with plain cargo; there is no configure step.
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	cargo build --release
+
+# Tests run in CI, not while building the package.
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -Dm755 target/release/c debian/cli-assistant/usr/bin/c
+	install -Dm755 target/release/clad debian/cli-assistant/usr/bin/clad
+	install -Dm644 config/com.cli-assistant.conf \
+		debian/cli-assistant/usr/share/dbus-1/system.d/com.cli-assistant.conf
+	install -Dm644 config/com.redhat.lightspeed.chat.service \
+		debian/cli-assistant/usr/share/dbus-1/system-services/com.redhat.lightspeed.chat.service
+	install -Dm644 config/com.redhat.lightspeed.history.service \
+		debian/cli-assistant/usr/share/dbus-1/system-services/com.redhat.lightspeed.history.service
+	install -Dm644 config/com.redhat.lightspeed.user.service \
+		debian/cli-assistant/usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service
+
+# The database directory holds conversation history: keep it root-only.
+override_dh_fixperms:
+	dh_fixperms
+	chmod 0700 debian/cli-assistant/var/lib/cli-assistant

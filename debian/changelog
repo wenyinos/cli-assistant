@@ -1,0 +1,9 @@
+cli-assistant (0.9.0) unstable; urgency=medium
+
+  * Initial Debian packaging, tracking upstream 0.9.0.
+  * Multi-turn conversation context for the interactive and TUI pages, with
+    automatic compaction of long histories into a model-written summary.
+  * New "c setup" first-run wizard; the package no longer ships a default
+    /etc/cli-assistant/config.toml.
+
+ -- cli-assistant contributors <wenyinos@users.noreply.github.com>  Wed, 23 Sep 2026 12:00:00 +0800

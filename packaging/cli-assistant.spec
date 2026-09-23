@@ -4,7 +4,7 @@
 %global modulename cli_assistant
 
 Name:           cli-assistant
-Version:        0.8.2
+Version:        0.9.0
 Release:        1%{?dist}
 Summary:        Command Line Assistant client and daemon
 
@@ -67,9 +67,6 @@ popd
 %{__install} -m 0644 config/com.redhat.lightspeed.user.service \
     %{buildroot}/usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service
 
-%{__install} -m 0644 config/config.toml \
-    %{buildroot}/etc/cli-assistant/config.toml
-
 %{__install} -m 0644 data/release/man/%{binary_name}.1 %{buildroot}/usr/local/share/man/man1/
 %{__install} -m 0644 data/release/man/%{daemon_binary_name}.8 %{buildroot}/usr/local/share/man/man8/
 
@@ -81,6 +78,7 @@ popd
 
 %post
 %systemd_post clad.service
+echo "cli-assistant installed. Run 'sudo c setup' to configure the backend."
 
 %postun
 %systemd_postun_with_restart clad.service
@@ -109,7 +107,7 @@ fi
 /usr/share/dbus-1/system-services/com.redhat.lightspeed.chat.service
 /usr/share/dbus-1/system-services/com.redhat.lightspeed.history.service
 /usr/share/dbus-1/system-services/com.redhat.lightspeed.user.service
-%config(noreplace) %attr(0644, root, root) /etc/cli-assistant/config.toml
+%dir %attr(0755, root, root) /etc/cli-assistant
 /usr/local/share/man/man1/%{binary_name}.1*
 /usr/local/share/man/man8/%{daemon_binary_name}.8*
 %dir %attr(0700, root, root) /var/lib/cli-assistant
@@ -118,6 +116,15 @@ fi
 %attr(0600, root, root) %{_datadir}/selinux/packages/%{selinuxtype}/%{modulename}.pp.bz2
 
 %changelog
+* Wed Sep 23 2026 cli-assistant contributors - 0.9.0-1
+- Multi-turn conversation context for the interactive/TUI pages, with automatic
+  compaction of long histories into a model-written summary.
+- New `c setup` first-run configuration wizard; packages no longer ship a
+  default /etc/cli-assistant/config.toml.
+- New `context_length` backend setting; DeepSeek defaults (deepseek-v4-flash,
+  expanded system prompt).
+- deb and pacman packaging added; all packages build for x86_64 and aarch64.
+
 * Mon Aug 03 2026 cli-assistant contributors - 0.8.2-1
 - Harden install/uninstall scripts: systemd check, RPM ownership detection,
   overridable paths.

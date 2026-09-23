@@ -1,0 +1,24 @@
+Source: cli-assistant
+Section: admin
+Priority: optional
+Maintainer: cli-assistant contributors <wenyinos@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), cargo, rustc
+Standards-Version: 4.6.2
+Homepage: https://github.com/wenyinos/cli-assistant
+Rules-Requires-Root: no
+
+Package: cli-assistant
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: CLI assistant for Linux system administration
+ cli-assistant is a fast command line assistant for Linux system
+ administration: ask questions in natural language and get answers from any
+ OpenAI-compatible API.
+ .
+ The c client talks to the clad daemon over the system D-Bus. The daemon holds
+ the API credentials, talks to the backend and stores conversation history in
+ SQLite. The interactive and TUI chat modes carry recent turns as conversation
+ context and compact long histories into a summary automatically.
+ .
+ Run "sudo c setup" after installation to configure the endpoint, API key and
+ model.

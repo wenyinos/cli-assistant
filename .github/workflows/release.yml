@@ -13,92 +13,20 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+  rpm:
+    name: RPM (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: fedora:latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            archive: cli-assistant-x86_64-linux-gnu.tar.gz
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            archive: cli-assistant-aarch64-linux-gnu.tar.gz
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Configure linker for aarch64
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          mkdir -p .cargo
-          cat >> .cargo/config.toml << 'EOF'
-          [target.aarch64-unknown-linux-gnu]
-          linker = "aarch64-linux-gnu-gcc"
-          EOF
-
-      - name: Build release
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Package
-        run: |
-          mkdir -p package/cli-assistant/bin
-          mkdir -p package/cli-assistant/config
-          mkdir -p package/cli-assistant/scripts
-
-          # Binaries
-          cp target/${{ matrix.target }}/release/c      package/cli-assistant/bin/
-          cp target/${{ matrix.target }}/release/clad    package/cli-assistant/bin/
-
-          # Config template
-          cp config/config.toml           package/cli-assistant/config/
-          cp config/com.cli-assistant.conf package/cli-assistant/config/
-          cp config/clad.service          package/cli-assistant/config/
-          cp config/com.redhat.lightspeed.chat.service \
-              package/cli-assistant/config/
-          cp config/com.redhat.lightspeed.history.service \
-              package/cli-assistant/config/
-          cp config/com.redhat.lightspeed.user.service \
-              package/cli-assistant/config/
-
-          # Install scripts
-          cp scripts/install.sh           package/cli-assistant/
-          cp scripts/uninstall.sh         package/cli-assistant/
-
-          # Release assets
-          cp -a data/release              package/cli-assistant/
-          cp -a packaging                 package/cli-assistant/
-
-          # License & docs
-          cp LICENSE README.md            package/cli-assistant/
-
-          cd package
-          tar czf ../${{ matrix.archive }} cli-assistant/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.archive }}
-          path: ${{ matrix.archive }}
-
-  rpm:
-    name: Build RPM
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:latest
     steps:
       - name: Install git (required for checkout to keep .git)
         run: dnf install -y git
@@ -130,21 +58,97 @@ jobs:
           rpmbuild \
             --define "_topdir ${GITHUB_WORKSPACE}/rpmbuild" \
             --define "_sourcedir ${GITHUB_WORKSPACE}/rpmbuild/SOURCES" \
+            --define "dist %{nil}" \
             -bb packaging/cli-assistant.spec
 
-      - name: Upload RPM artifacts
+      - name: Collect RPM artifacts
         run: |
           find rpmbuild/RPMS -type f \
             \( -name 'cli-assistant-[0-9]*.rpm' -o -name 'cli-assistant-selinux-*.rpm' \) \
             -exec cp -n {} . \;
+
       - uses: actions/upload-artifact@v4
         with:
-          name: cli-assistant-rpm
+          name: cli-assistant-rpm-${{ matrix.arch }}
           path: ./*.rpm
+
+  deb:
+    name: DEB (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Debian build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential debhelper devscripts
+
+      - name: Build the package
+        run: |
+          # Native package: builds in place, no orig tarball required.
+          dpkg-buildpackage -us -uc -b
+
+      - name: Collect DEB artifacts
+        run: |
+          find .. -maxdepth 1 -name '*.deb' -exec cp -n {} . \;
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-assistant-deb-${{ matrix.arch }}
+          path: ./*.deb
+
+  pacman:
+    name: Pacman (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Arch Linux's official repositories and container images are
+          # x86_64-only; the PKGBUILD declares aarch64 as well, so Arch Linux
+          # ARM users can build the same package locally with makepkg.
+          - arch: x86_64
+            runner: ubuntu-latest
+
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm git sudo rust
+
+      - uses: actions/checkout@v4
+
+      - name: Build the package
+        run: |
+          # makepkg refuses to run as root, so build as an unprivileged user.
+          useradd -m builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+          su builder -c 'cd "${GITHUB_WORKSPACE}/packaging" && makepkg -s --noconfirm'
+
+      - name: Collect pacman artifacts
+        run: |
+          cp packaging/*.pkg.tar.* .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-assistant-pacman-${{ matrix.arch }}
+          path: ./*.pkg.tar.*
 
   release:
     name: Create Release
-    needs: [build, rpm]
+    needs: [rpm, deb, pacman]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -153,10 +157,42 @@ jobs:
         with:
           merge-multiple: true
 
+      - name: Generate checksums
+        run: |
+          sha256sum *.rpm *.deb *.pkg.tar.zst > checksums.txt
+          cat checksums.txt
+
+      - name: Prepare release notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cat > release-body.md <<'EOF'
+          ## 下载 / Downloads
+
+          `c`（客户端）与 `clad`（守护进程）在同一个包中；安装后运行 `sudo c setup`
+          交互完成配置（端点、API Key、模型、回复语言）。每个包可用 `checksums.txt`
+          核对 SHA256。The client and daemon ship in one package; run `sudo c setup`
+          after installing.
+
+          **Linux**（Debian / Ubuntu 用 `.deb`，Fedora / RHEL 用 `.rpm`，Arch 用 `.pkg.tar.zst`）
+
+          | 架构 / Arch | Debian / Ubuntu | Fedora / RHEL | Arch Linux |
+          |---|---|---|---|
+          | amd64 / x86-64 | [.deb](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant_@VERSION@_amd64.deb) | [.rpm](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1.x86_64.rpm) | [.pkg.tar.zst](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1-x86_64.pkg.tar.zst) |
+          | arm64 / aarch64 | [.deb](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant_@VERSION@_arm64.deb) | [.rpm](https://github.com/@REPO@/releases/download/@TAG@/cli-assistant-@VERSION@-1.aarch64.rpm) | 本地 `makepkg` 构建 |
+
+          Fedora / RHEL 另附 SELinux 策略子包 `cli-assistant-selinux`。Arch Linux ARM
+          用户可用仓库中的 `packaging/PKGBUILD` 本地构建 aarch64 包。
+          EOF
+          sed -i "s|@REPO@|${GITHUB_REPOSITORY}|g; s|@TAG@|${GITHUB_REF_NAME}|g; s|@VERSION@|${VERSION}|g" release-body.md
+          cat release-body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body_path: release-body.md
           files: |
-            *.tar.gz
             *.rpm
+            *.deb
+            *.pkg.tar.zst
+            checksums.txt

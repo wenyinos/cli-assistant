@@ -193,6 +193,18 @@ impl HistoryRepository {
         .await
     }
 
+    /// Store the compacted summary of earlier conversation turns.
+    pub async fn update_summary(&self, history_id: &str, summary: &str) -> Result<(), sqlx::Error> {
+        let ts = now_str();
+        sqlx::query("UPDATE histories SET summary = $1, updated_at = $2 WHERE id = $3")
+            .bind(summary)
+            .bind(&ts)
+            .bind(history_id)
+            .execute(self.manager.pool())
+            .await?;
+        Ok(())
+    }
+
     /// Soft-delete **all** history for a user (cascading to interactions).
     pub async fn delete_all(&self, user_id: &str) -> Result<(), sqlx::Error> {
         let ts = now_str();
@@ -312,7 +324,8 @@ impl InteractionRepository {
         .await
     }
 
-    /// Return all non-deleted interactions for a given history record.
+    /// Return all non-deleted interactions for a given history record, in
+    /// chronological order. `rowid` breaks ties for same-second timestamps.
     pub async fn select_by_history_id(
         &self,
         history_id: &str,
@@ -320,11 +333,49 @@ impl InteractionRepository {
         sqlx::query_as::<_, InteractionModel>(
             "SELECT * FROM interactions
              WHERE history_id = $1 AND deleted_at IS NULL
-             ORDER BY created_at ASC",
+             ORDER BY created_at ASC, rowid ASC",
         )
         .bind(history_id)
         .fetch_all(self.manager.pool())
         .await
+    }
+
+    /// Return the non-deleted interactions that have not been folded into the
+    /// summary yet, in chronological order.
+    pub async fn select_unsummarized_by_history_id(
+        &self,
+        history_id: &str,
+    ) -> Result<Vec<InteractionModel>, sqlx::Error> {
+        sqlx::query_as::<_, InteractionModel>(
+            "SELECT * FROM interactions
+             WHERE history_id = $1 AND deleted_at IS NULL AND summarized = 0
+             ORDER BY created_at ASC, rowid ASC",
+        )
+        .bind(history_id)
+        .fetch_all(self.manager.pool())
+        .await
+    }
+
+    /// Mark interactions as folded into the history summary.
+    pub async fn mark_summarized(&self, ids: &[String]) -> Result<(), sqlx::Error> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let ts = now_str();
+        // sqlx has no variadic binds, so build the placeholder list by hand.
+        let placeholders = (0..ids.len())
+            .map(|i| format!("${}", i + 2))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "UPDATE interactions SET summarized = 1, updated_at = $1 WHERE id IN ({placeholders})"
+        );
+        let mut query = sqlx::query(&sql).bind(&ts);
+        for id in ids {
+            query = query.bind(id);
+        }
+        query.execute(self.manager.pool()).await?;
+        Ok(())
     }
 
     /// Soft-delete a single interaction.
