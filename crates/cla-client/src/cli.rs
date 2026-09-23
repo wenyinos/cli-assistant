@@ -2,12 +2,34 @@
 
 use clap::{Parser, Subcommand};
 
+/// Usage examples shown at the end of `c --help`.
+///
+/// Covers the same commands as the "Usage" section of README.md.
+const EXAMPLES: &str = "\
+EXAMPLES:
+    sudo c setup                        Configure the backend (writes /etc/cli-assistant/config.toml)
+    c \"how do I check disk space?\"      Ask a single question
+    c chat --interactive                Multi-turn conversation that keeps context
+    c chat --tui                        Full-screen TUI conversation
+    c chat -a /var/log/messages \"explain this\"   Attach a file as context
+    c history --all                     Show all conversation history
+    c history --filter \"systemd\"        Search the history
+    c history --clear                   Clear the history of the current chat
+    c feedback                          Show feedback information
+    c shell --enable-interactive        Enable the Ctrl+G interactive shortcut";
+
 /// Command Line Assistant powered by RHEL Lightspeed.
 ///
 /// An AI-driven assistant for RHEL system management, available directly
 /// from the command line.
 #[derive(Debug, Parser)]
-#[command(name = "c", version, about, disable_help_subcommand = true)]
+#[command(
+    name = "c",
+    version,
+    about,
+    disable_help_subcommand = true,
+    after_long_help = EXAMPLES
+)]
 pub struct Cli {
     /// Enable plain output (no colors, animations, or rich content).
     #[arg(short, long, global = true)]
@@ -107,11 +129,11 @@ pub enum Commands {
         #[arg(long)]
         enable_capture: bool,
 
-        /// Enable the shell integration for interactive mode.
+        /// Enable the Ctrl+G shell integration for interactive mode (bash and zsh).
         #[arg(long)]
         enable_interactive: bool,
 
-        /// Disable the shell integration for interactive mode.
+        /// Disable the Ctrl+G shell integration.
         #[arg(long)]
         disable_interactive: bool,
     },

@@ -144,8 +144,8 @@ c chat -a /path/to/file "解释这个"   # 附加文件作为上下文
 c history --all                     # 查看所有历史记录
 c history --filter "关键词"          # 搜索历史记录
 c history --clear                   # 清除当前会话历史
-c feedback                          # 查看反馈信息
-c shell --enable-interactive        # 启用 Ctrl+G 快捷键
+c feedback                          # 查看反馈渠道（GitHub Issues）
+c shell --enable-interactive        # 启用 Ctrl+G 快捷键（bash / zsh）
 ```
 
 ## 相对原项目的改进

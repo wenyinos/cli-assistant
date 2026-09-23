@@ -12,7 +12,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
 use tokio::sync::mpsc;
 
@@ -20,6 +20,7 @@ use cla_dbus::structures::{Question, StdinInput};
 
 use crate::dbus_client::DbusClient;
 use crate::history_payload;
+use crate::rendering::markdown::markdown_to_lines;
 
 #[derive(Clone)]
 enum Role {
@@ -208,41 +209,59 @@ fn draw(frame: &mut Frame, state: &TuiState) {
         chunks[0],
     );
 
-    let mut items = state
-        .messages
-        .iter()
-        .map(|message| {
-            let (prefix, style) = match message.role {
-                Role::User => ("You", Style::default().fg(Color::Cyan)),
-                Role::Assistant => ("Assistant", Style::default().fg(Color::Green)),
-                Role::Error => ("Error", Style::default().fg(Color::Red)),
-            };
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("{}: ", prefix), style),
-                Span::raw(message.text.clone()),
-            ]))
-        })
-        .collect::<Vec<_>>();
+    // Render the conversation as one wrapped paragraph: a `List` clips long
+    // entries at the border, while wrapping folds them onto continuation lines.
+    let mut lines: Vec<Line> = Vec::new();
+    for message in &state.messages {
+        let (prefix, style) = match message.role {
+            Role::User => ("You", Style::default().fg(Color::Cyan)),
+            Role::Assistant => ("Assistant", Style::default().fg(Color::Green)),
+            Role::Error => ("Error", Style::default().fg(Color::Red)),
+        };
 
-    if state.pending {
-        items.push(ListItem::new(Line::from(Span::styled(
-            "Asking...",
-            Style::default().fg(Color::Yellow),
-        ))));
+        let mut body = markdown_to_lines(&message.text);
+        if body.is_empty() {
+            body.push(Line::from(""));
+        }
+        for (index, line) in body.into_iter().enumerate() {
+            let mut spans = Vec::new();
+            if index == 0 {
+                spans.push(Span::styled(format!("{}: ", prefix), style));
+            } else {
+                // Continuation lines line up under the message text.
+                spans.push(Span::raw("  "));
+            }
+            spans.extend(line.spans);
+            lines.push(Line::from(spans));
+        }
     }
 
-    let list = List::new(items)
+    if state.pending {
+        lines.push(Line::from(Span::styled(
+            "Asking...",
+            Style::default().fg(Color::Yellow),
+        )));
+    }
+
+    // Keep the newest content in view. `Paragraph::line_count` is private in
+    // ratatui 0.29, so estimate the wrapped height from each line's display
+    // width instead.
+    let inner_width = chunks[1].width.saturating_sub(2).max(1) as usize;
+    let inner_height = chunks[1].height.saturating_sub(2) as usize;
+    let wrapped_lines: usize = lines
+        .iter()
+        .map(|line| line.width().max(1).div_ceil(inner_width))
+        .sum();
+    let scroll = wrapped_lines.saturating_sub(inner_height);
+
+    let conversation = Paragraph::new(lines)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(" Conversation "),
         )
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
-    let mut list_state = ListState::default();
-    if !state.messages.is_empty() {
-        list_state.select(Some(state.messages.len() - 1));
-    }
-    frame.render_stateful_widget(list, chunks[1], &mut list_state);
+        .wrap(Wrap { trim: false });
+    frame.render_widget(conversation.scroll((scroll as u16, 0)), chunks[1]);
 
     frame.render_widget(
         Paragraph::new(state.input.as_str())
@@ -255,4 +274,97 @@ fn draw(frame: &mut Frame, state: &TuiState) {
         Paragraph::new("Enter send, Esc clear, Ctrl+C/Ctrl+D quit"),
         chunks[3],
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::backend::TestBackend;
+
+    /// Render the TUI into a test backend and return the visible text.
+    fn render(state: &TuiState, width: u16, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("terminal");
+        terminal
+            .draw(|frame| draw(frame, state))
+            .expect("draw to test backend");
+
+        let buffer = terminal.backend().buffer();
+        let mut rendered = String::new();
+        for y in 0..height {
+            for x in 0..width {
+                rendered.push_str(buffer.cell((x, y)).map(|c| c.symbol()).unwrap_or(" "));
+            }
+            rendered.push('\n');
+        }
+        rendered
+    }
+
+    #[test]
+    fn long_messages_wrap_instead_of_being_clipped() {
+        let state = TuiState {
+            messages: vec![ChatMessage {
+                role: Role::Assistant,
+                text: "x".repeat(200),
+            }],
+            input: String::new(),
+            pending: false,
+        };
+
+        // A window tall enough to fit the wrapped message must show all of it.
+        let rendered = render(&state, 40, 24);
+        assert_eq!(
+            rendered.matches('x').count(),
+            200,
+            "every character must stay visible after wrapping"
+        );
+    }
+
+    #[test]
+    fn long_conversations_scroll_to_the_newest_message() {
+        let state = TuiState {
+            messages: vec![
+                ChatMessage {
+                    role: Role::User,
+                    text: "an old question".to_string(),
+                },
+                ChatMessage {
+                    role: Role::Assistant,
+                    text: "y".repeat(300),
+                },
+                ChatMessage {
+                    role: Role::Assistant,
+                    text: "NEWEST".to_string(),
+                },
+            ],
+            input: String::new(),
+            pending: false,
+        };
+
+        // A short window cannot show everything, but the newest entry must
+        // remain visible: the view scrolls to the end.
+        let rendered = render(&state, 40, 10);
+        assert!(
+            rendered.contains("NEWEST"),
+            "the newest message must stay in view"
+        );
+    }
+
+    #[test]
+    fn markdown_markers_are_not_shown_raw() {
+        let state = TuiState {
+            messages: vec![ChatMessage {
+                role: Role::Assistant,
+                text: "**recommendation**: tomato eggs".to_string(),
+            }],
+            input: String::new(),
+            pending: false,
+        };
+
+        let rendered = render(&state, 60, 8);
+        assert!(rendered.contains("recommendation"));
+        assert!(
+            !rendered.contains("**"),
+            "markers must be rendered, not shown"
+        );
+    }
 }

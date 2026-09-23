@@ -8,6 +8,7 @@ mod terminal;
 mod tui;
 
 use std::io::{self, IsTerminal, Read};
+use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::Parser;
@@ -565,12 +566,13 @@ async fn handle_history(
 
 fn handle_feedback(renderer: &Renderer) -> i32 {
     renderer.notice(
-        "Do not include any personal information or other \
-         sensitive information in your feedback. Feedback may \
-         be used to improve Red Hat's products or services.",
+        "Do not include personal information or other sensitive details — \
+         issue reports are public.",
     );
-    renderer
-        .normal("To submit feedback, use the following email address: <cla-feedback@redhat.com>.");
+    renderer.normal(
+        "Report bugs and request features at: \
+         https://github.com/wenyinos/cli-assistant/issues",
+    );
     0
 }
 
@@ -585,11 +587,11 @@ fn handle_shell(
     disable_interactive: bool,
 ) -> i32 {
     if enable_interactive {
-        return write_bashrc_integration(renderer, "cla-interactive.bashrc", BASH_INTERACTIVE);
+        return enable_interactive_integration(renderer);
     }
 
     if disable_interactive {
-        return remove_bashrc_integration(renderer, "cla-interactive.bashrc");
+        return disable_interactive_integration(renderer);
     }
 
     if enable_capture {
@@ -630,84 +632,206 @@ fn handle_shell(
     1
 }
 
-const BASH_INTERACTIVE: &str = r#"
-# Command Line Assistant Interactive Mode Integration
-__c_interactive() {
+/// Markers around the block appended to the user's shell rc file.
+const INTEGRATION_BEGIN: &str = "# >>> cli-assistant interactive integration >>>";
+const INTEGRATION_END: &str = "# <<< cli-assistant interactive integration <<<";
+
+/// Ctrl+G opens the interactive chat; bash variant.
+const BASH_INTERACTIVE: &str = r#"__c_interactive() {
     local old_tty=$(stty -g)
-    local c_binary=/usr/local/bin/c
 
-    cleanup() {
-        stty "$old_tty"
-    }
-
-    trap cleanup EXIT
     stty sane
     stty echo
     stty icanon
 
-    if command -v $c_binary >/dev/null 2>&1; then
-        $c_binary chat --interactive
+    if command -v c >/dev/null 2>&1; then
+        c chat --interactive
     else
-        echo "Error: Command Line Assistant is not installed"
-        return 1
+        echo "Error: cli-assistant is not installed"
     fi
 
-    cleanup
+    stty "$old_tty"
 }
 
-bind -x '"\C-g": __c_interactive'
-"#;
+bind -x '"\C-g": __c_interactive'"#;
 
-fn write_bashrc_integration(renderer: &Renderer, filename: &str, contents: &str) -> i32 {
-    let bashrc_d = dirs::home_dir().unwrap_or_default().join(".bashrc.d");
+/// Ctrl+G opens the interactive chat; zsh variant.
+const ZSH_INTERACTIVE: &str = r#"cla-interactive() {
+    zle -I
+    local old_tty=$(stty -g)
 
-    if let Err(e) = files::create_folder(&bashrc_d, true, 0o700) {
-        renderer.error(&format!("Failed to create bashrc.d directory: {}", e));
-        return 1;
+    stty sane
+    stty echo
+    stty icanon
+
+    if command -v c >/dev/null 2>&1; then
+        c chat --interactive
+    else
+        echo "Error: cli-assistant is not installed"
+    fi
+
+    stty "$old_tty"
+}
+
+zle -N cla-interactive
+bindkey '^g' cla-interactive"#;
+
+/// The rc file and snippet matching the user's login shell.
+struct ShellIntegration {
+    shell: &'static str,
+    rc_file: PathBuf,
+    snippet: &'static str,
+}
+
+/// Pick the integration matching `$SHELL`; `None` for unsupported shells.
+fn shell_integration() -> Option<ShellIntegration> {
+    let shell = std::env::var("SHELL").unwrap_or_default();
+    let name = Path::new(&shell).file_name()?.to_str()?;
+    let home = dirs::home_dir()?;
+
+    match name {
+        "bash" => Some(ShellIntegration {
+            shell: "bash",
+            rc_file: home.join(".bashrc"),
+            snippet: BASH_INTERACTIVE,
+        }),
+        "zsh" => Some(ShellIntegration {
+            shell: "zsh",
+            rc_file: home.join(".zshrc"),
+            snippet: ZSH_INTERACTIVE,
+        }),
+        _ => None,
+    }
+}
+
+/// Remove a previously written integration block from `text`.
+fn strip_integration_block(text: &str) -> String {
+    let mut out = String::new();
+    let mut inside = false;
+
+    for line in text.lines() {
+        if line.trim() == INTEGRATION_BEGIN {
+            inside = true;
+            continue;
+        }
+        if line.trim() == INTEGRATION_END {
+            inside = false;
+            continue;
+        }
+        if !inside {
+            out.push_str(line);
+            out.push('\n');
+        }
     }
 
-    let file_path = bashrc_d.join(filename);
-    if file_path.exists() {
-        renderer.warning(&format!(
-            "The integration is already present and enabled at {}! \
-             Restart your terminal or source ~/.bashrc in case it's not working.",
-            file_path.display()
+    out
+}
+
+fn enable_interactive_integration(renderer: &Renderer) -> i32 {
+    let Some(integration) = shell_integration() else {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "(unknown)".to_string());
+        renderer.error(&format!(
+            "Unsupported shell '{shell}': only bash and zsh integrations are provided."
         ));
-        return 2;
-    }
+        return 1;
+    };
 
-    if let Err(e) = files::write_file(contents.as_bytes(), &file_path, 0o644) {
-        renderer.error(&format!("Failed to write integration file: {}", e));
+    // Keep the rc file, drop any previous block, then append the current one.
+    let existing = std::fs::read_to_string(&integration.rc_file).unwrap_or_default();
+    let mut updated = strip_integration_block(&existing);
+    if !updated.is_empty() && !updated.ends_with('\n') {
+        updated.push('\n');
+    }
+    updated.push_str(INTEGRATION_BEGIN);
+    updated.push('\n');
+    updated.push_str(integration.snippet);
+    updated.push('\n');
+    updated.push_str(INTEGRATION_END);
+    updated.push('\n');
+
+    if let Err(e) = files::write_file(updated.as_bytes(), &integration.rc_file, 0o644) {
+        renderer.error(&format!(
+            "Failed to update {}: {}",
+            integration.rc_file.display(),
+            e
+        ));
         return 1;
     }
+
+    // Older versions wrote a file into ~/.bashrc.d, which most distributions
+    // never source; remove it so only one integration remains active.
+    remove_legacy_bashrc_file(renderer);
 
     renderer.normal(&format!(
-        "Integration successfully added at {}. \
-         In order to use it, please restart your terminal or source ~/.bashrc",
-        file_path.display()
+        "Ctrl+G integration added to {} ({}).",
+        integration.rc_file.display(),
+        integration.shell
+    ));
+    renderer.normal(&format!(
+        "Restart your terminal or run: source {}",
+        integration.rc_file.display()
     ));
     0
 }
 
-fn remove_bashrc_integration(renderer: &Renderer, filename: &str) -> i32 {
-    let file_path = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".bashrc.d")
-        .join(filename);
+fn disable_interactive_integration(renderer: &Renderer) -> i32 {
+    let Some(home) = dirs::home_dir() else {
+        renderer.error("Could not determine the home directory.");
+        return 1;
+    };
 
-    if !file_path.exists() {
-        renderer.warning("It seems that the integration is not enabled. Skipping operation.");
-        return 2;
+    // Clean both rc files: the user may have switched shells since enabling.
+    let mut removed = false;
+    for rc_name in [".bashrc", ".zshrc"] {
+        let rc = home.join(rc_name);
+        let Ok(existing) = std::fs::read_to_string(&rc) else {
+            continue;
+        };
+        if !existing.contains(INTEGRATION_BEGIN) {
+            continue;
+        }
+
+        let updated = strip_integration_block(&existing);
+        if let Err(e) = files::write_file(updated.as_bytes(), &rc, 0o644) {
+            renderer.error(&format!("Failed to update {}: {}", rc.display(), e));
+            return 1;
+        }
+        renderer.normal(&format!("Removed the integration from {}", rc.display()));
+        removed = true;
     }
 
-    match std::fs::remove_file(&file_path) {
+    if remove_legacy_bashrc_file(renderer) {
+        removed = true;
+    }
+
+    if !removed {
+        renderer.warning("The shell integration is not enabled.");
+        return 2;
+    }
+    0
+}
+
+/// Delete the `~/.bashrc.d/cla-interactive.bashrc` written by older versions.
+fn remove_legacy_bashrc_file(renderer: &Renderer) -> bool {
+    let Some(home) = dirs::home_dir() else {
+        return false;
+    };
+    let legacy = home.join(".bashrc.d").join("cla-interactive.bashrc");
+    if !legacy.exists() {
+        return false;
+    }
+
+    match std::fs::remove_file(&legacy) {
         Ok(()) => {
-            renderer.normal("Integration disabled successfully.");
-            0
+            renderer.normal(&format!(
+                "Removed the old integration file {}",
+                legacy.display()
+            ));
+            true
         }
         Err(e) => {
-            renderer.error(&format!("Failed to remove integration: {}", e));
-            1
+            renderer.warning(&format!("Could not remove {}: {}", legacy.display(), e));
+            false
         }
     }
 }
@@ -898,5 +1022,28 @@ mod tests {
         let args = add_default_command(vec!["c".to_string(), "setup".to_string()]);
         let cli = Cli::try_parse_from(args).expect("parse");
         assert!(matches!(cli.command, Some(Commands::Setup)));
+    }
+
+    #[test]
+    fn strip_integration_block_removes_only_the_block() {
+        let text = "export PATH=$PATH\n\
+                    echo keep\n\
+                    # >>> cli-assistant interactive integration >>>\n\
+                    blocked content\n\
+                    # <<< cli-assistant interactive integration <<<\n\
+                    echo after\n";
+        let stripped = strip_integration_block(text);
+
+        assert!(stripped.contains("export PATH"));
+        assert!(stripped.contains("echo keep"));
+        assert!(stripped.contains("echo after"));
+        assert!(!stripped.contains("blocked content"));
+        assert!(!stripped.contains(INTEGRATION_BEGIN));
+    }
+
+    #[test]
+    fn strip_integration_block_is_a_noop_without_a_block() {
+        let text = "echo hello\n";
+        assert_eq!(strip_integration_block(text), text);
     }
 }

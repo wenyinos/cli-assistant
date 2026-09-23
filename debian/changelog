@@ -1,3 +1,12 @@
+cli-assistant (0.9.1) unstable; urgency=medium
+
+  * Interactive shell integration supports bash and zsh (written into the shell
+    rc file with a removable marker block); `c feedback` points at the project
+    issue tracker; TUI messages wrap and render markdown; `c --help` gained an
+    EXAMPLES section.
+
+ -- cli-assistant contributors <wenyinos@users.noreply.github.com>  Wed, 23 Sep 2026 22:30:00 +0800
+
 cli-assistant (0.9.0) unstable; urgency=medium
 
   * Initial Debian packaging, tracking upstream 0.9.0.

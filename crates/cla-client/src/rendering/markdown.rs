@@ -3,6 +3,9 @@
 //! Converts markdown text into ANSI-formatted terminal output with colored
 //! headers, code blocks, lists, links, and inline formatting.
 
+use ratatui::style::{Color, Modifier, Style as TuiStyle};
+use ratatui::text::{Line, Span};
+
 use super::colors::{colorize, stylize, Style};
 use super::theme::Theme;
 
@@ -241,6 +244,118 @@ fn strip_ordered_list_prefix(line: &str) -> Option<&str> {
     Some(&trimmed[trimmed.len() - chars.as_str().len()..])
 }
 
+// ---------------------------------------------------------------------------
+// TUI rendering
+// ---------------------------------------------------------------------------
+
+/// Convert markdown text into ratatui lines for the TUI conversation view.
+///
+/// Handles the constructs the assistant commonly emits — headers, bullets,
+/// fenced code blocks, and inline `**bold**` / `` `code` `` — leaving line
+/// wrapping to the widget. The ANSI renderer above cannot be reused here:
+/// ratatui builds its own cell grid, so styles must become spans.
+pub fn markdown_to_lines(text: &str) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    let mut in_code_block = false;
+
+    for raw in text.lines() {
+        let trimmed = raw.trim_end();
+
+        // Fenced code blocks: drop the fence lines, keep the content indented.
+        if trimmed.trim_start().starts_with("```") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+        if in_code_block {
+            lines.push(Line::from(Span::styled(
+                format!("  {}", trimmed.trim_start()),
+                TuiStyle::default().fg(Color::Yellow),
+            )));
+            continue;
+        }
+
+        let (content, style, prefix) = if let Some(rest) = trimmed
+            .strip_prefix("### ")
+            .or_else(|| trimmed.strip_prefix("## "))
+            .or_else(|| trimmed.strip_prefix("# "))
+        {
+            (rest, TuiStyle::default().add_modifier(Modifier::BOLD), "")
+        } else if let Some(rest) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
+            (rest, TuiStyle::default(), "• ")
+        } else {
+            (trimmed, TuiStyle::default(), "")
+        };
+
+        let mut spans = Vec::new();
+        if !prefix.is_empty() {
+            spans.push(Span::styled(prefix.to_string(), style));
+        }
+        spans.extend(inline_spans(content, style));
+        lines.push(Line::from(spans));
+    }
+
+    lines
+}
+
+/// Split `text` into styled spans, converting `**bold**` and `` `code` ``.
+///
+/// Unpaired markers are kept as literal text.
+fn inline_spans(text: &str, base: TuiStyle) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut rest = text;
+
+    loop {
+        let bold = rest.find("**");
+        let code = rest.find('`');
+
+        let (pos, is_bold) = match (bold, code) {
+            (Some(b), Some(c)) if b <= c => (b, true),
+            (Some(_), Some(c)) => (c, false),
+            (Some(b), None) => (b, true),
+            (None, Some(c)) => (c, false),
+            (None, None) => break,
+        };
+
+        if pos > 0 {
+            spans.push(Span::styled(rest[..pos].to_string(), base));
+        }
+
+        // Locate the closing marker; unpaired markers stay as literal text.
+        let found = if is_bold {
+            rest[pos + 2..]
+                .find("**")
+                .map(|end| (&rest[pos + 2..pos + 2 + end], pos + 2 + end + 2))
+        } else {
+            rest[pos + 1..]
+                .find('`')
+                .map(|end| (&rest[pos + 1..pos + 1 + end], pos + 1 + end + 1))
+        };
+
+        let Some((inner, next)) = found else {
+            // Unpaired marker: keep the remainder as plain text.
+            spans.push(Span::styled(rest[pos..].to_string(), base));
+            return spans;
+        };
+
+        let style = if is_bold {
+            base.add_modifier(Modifier::BOLD)
+        } else {
+            TuiStyle::default().fg(Color::Yellow)
+        };
+        spans.push(Span::styled(inner.to_string(), style));
+        rest = &rest[next..];
+    }
+
+    if !rest.is_empty() {
+        spans.push(Span::styled(rest.to_string(), base));
+    }
+
+    spans
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,5 +394,42 @@ mod tests {
         assert!(output.contains("inline"));
         assert!(output.contains("docs"));
         assert!(output.contains("https://docs.example.com"));
+    }
+
+    #[test]
+    fn tui_lines_strip_markers_and_keep_styles() {
+        let lines = markdown_to_lines("**bold** and `code`");
+        let text: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "bold and code");
+        assert!(lines[0].spans[0]
+            .style
+            .add_modifier
+            .contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn tui_lines_render_headers_bullets_and_code_blocks() {
+        let lines = markdown_to_lines("# Title\n- item\n```sh\nls -la\n```");
+        assert_eq!(lines.len(), 3);
+
+        let header: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(header, "Title");
+        assert!(lines[0].spans[0]
+            .style
+            .add_modifier
+            .contains(Modifier::BOLD));
+
+        let bullet: String = lines[1].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(bullet, "• item");
+
+        let code: String = lines[2].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(code, "  ls -la");
+    }
+
+    #[test]
+    fn tui_lines_keep_unpaired_markers() {
+        let lines = markdown_to_lines("2 ** 8 is a power");
+        let text: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(text, "2 ** 8 is a power");
     }
 }

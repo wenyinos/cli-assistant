@@ -4,7 +4,7 @@
 %global modulename cli_assistant
 
 Name:           cli-assistant
-Version:        0.9.0
+Version:        0.9.1
 Release:        1%{?dist}
 Summary:        Command Line Assistant client and daemon
 
@@ -116,6 +116,13 @@ fi
 %attr(0600, root, root) %{_datadir}/selinux/packages/%{selinuxtype}/%{modulename}.pp.bz2
 
 %changelog
+* Wed Sep 23 2026 cli-assistant contributors - 0.9.1-1
+- Interactive shell integration supports bash and zsh, written into the shell
+  rc file with a removable marker block; `c feedback` points at the project
+  issue tracker.
+- The TUI conversation wraps long messages and renders markdown; `c --help`
+  gained an EXAMPLES section and word-wrapped output.
+
 * Wed Sep 23 2026 cli-assistant contributors - 0.9.0-1
 - Multi-turn conversation context for the interactive/TUI pages, with automatic
   compaction of long histories into a model-written summary.

@@ -1,7 +1,7 @@
 # Maintainer: cli-assistant contributors <wenyinos@users.noreply.github.com>
 
 pkgname=cli-assistant
-pkgver=0.9.0
+pkgver=0.9.1
 pkgrel=1
 pkgdesc="CLI assistant for Linux system administration (OpenAI-compatible backend)"
 arch=('x86_64' 'aarch64')

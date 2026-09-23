@@ -149,8 +149,8 @@ c chat -a /path/to/file "explain this"  # attach a file
 c history --all                 # view all history
 c history --filter "keyword"    # search history
 c history --clear               # clear history for a chat
-c feedback                      # show feedback info
-c shell --enable-interactive    # enable Ctrl+G shortcut
+c feedback                      # where to report bugs and request features
+c shell --enable-interactive    # enable the Ctrl+G shortcut (bash and zsh)
 ```
 
 ## Improvements Over the Original
