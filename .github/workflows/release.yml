@@ -134,12 +134,21 @@ jobs:
 
       - name: Build the package
         run: |
-          # makepkg refuses to run as root, so build as an unprivileged user
-          # with passwordless sudo (needed if makepkg has to install deps).
+          # makepkg refuses to run as root, so build as an unprivileged user.
           useradd -m builder
           echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+
+          # Build with the official rustup toolchain: inside this container,
+          # builds performed with Arch's rust package fail to resolve the
+          # symbols of bundled static libraries (sqlx's SQLite, ring), while
+          # rustup builds succeed in every other environment we build in
+          # (Fedora, Debian, and locally with the same rust/lld/CFLAGS
+          # combinations). Arch's rust package stays installed so makepkg's
+          # dependency check passes; PATH makes rustup's toolchain win.
+          su builder -c 'curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable'
+
           chown -R builder:builder "${GITHUB_WORKSPACE}"
-          su builder -c 'cd "${GITHUB_WORKSPACE}/packaging" && makepkg -s --noconfirm'
+          su builder -c 'export PATH="/home/builder/.cargo/bin:$PATH"; cd "${GITHUB_WORKSPACE}/packaging" && makepkg -s --noconfirm'
 
       - name: Collect pacman artifacts
         run: |
